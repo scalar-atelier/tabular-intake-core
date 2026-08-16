@@ -30,7 +30,7 @@ The public API is `run_csv_intake(source_bytes, history_bytes, rules)`. A Google
 
 [`apps-script/read_bridge.gs`](apps-script/read_bridge.gs) supports one HMAC-authenticated `snapshot_v1` action. Spreadsheet ID and the source/history tab names are Script Properties fixed by the deployer, never request fields. The bridge reads only those two tabs, writes nothing, installs no trigger, calls no SMS or external service, and returns no logs containing row data.
 
-Deploy it as a web app that executes as the deployer. Keep its endpoint and shared secret outside packs and bindings. Clients must restrict the initial URL to `script.google.com` and only follow Google ContentService redirects to `script.googleusercontent.com`.
+Deploy it as a web app that executes as the deployer. Set separate `SNAPSHOT_SOURCE_SPREADSHEET_ID` and `SNAPSHOT_HISTORY_SPREADSHEET_ID` properties when the two bound tabs live in different files; `SNAPSHOT_SPREADSHEET_ID` is the shorthand for one file. Keep its endpoint and shared secret outside packs and bindings. Clients must restrict the initial URL to `script.google.com` and only follow Google ContentService redirects to `script.googleusercontent.com`.
 
 ## Non-goals
 

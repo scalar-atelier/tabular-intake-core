@@ -2,8 +2,9 @@
  * Read-only scalar-tabular-intake snapshot bridge.
  *
  * Required Script Properties:
- *   SNAPSHOT_SPREADSHEET_ID, SNAPSHOT_SOURCE_TAB, SNAPSHOT_HISTORY_TAB,
- *   SNAPSHOT_SHARED_SECRET
+ *   SNAPSHOT_SOURCE_SPREADSHEET_ID, SNAPSHOT_HISTORY_SPREADSHEET_ID,
+ *   SNAPSHOT_SOURCE_TAB, SNAPSHOT_HISTORY_TAB, SNAPSHOT_SHARED_SECRET
+ * SNAPSHOT_SPREADSHEET_ID remains a shorthand when both tabs share one file.
  * Deploy as a web app that executes as the deployer. The request cannot choose
  * a spreadsheet, tab, or range.
  */
@@ -18,14 +19,16 @@ function doPost(event) {
     const request = parseSnapshotRequest_(event);
     verifySnapshotRequest_(request);
     const properties = PropertiesService.getScriptProperties();
-    const spreadsheetId = requiredProperty_(properties, 'SNAPSHOT_SPREADSHEET_ID');
+    const sharedSpreadsheetId = properties.getProperty('SNAPSHOT_SPREADSHEET_ID');
+    const sourceSpreadsheetId = properties.getProperty('SNAPSHOT_SOURCE_SPREADSHEET_ID') || sharedSpreadsheetId;
+    const historySpreadsheetId = properties.getProperty('SNAPSHOT_HISTORY_SPREADSHEET_ID') || sharedSpreadsheetId;
+    if (!sourceSpreadsheetId || !historySpreadsheetId) throw new Error('bridge_unconfigured');
     const sourceTab = requiredProperty_(properties, 'SNAPSHOT_SOURCE_TAB');
     const historyTab = requiredProperty_(properties, 'SNAPSHOT_HISTORY_TAB');
-    const book = SpreadsheetApp.openById(spreadsheetId);
     const response = {
       schemaVersion: 'scalar-tabular-snapshot/v1',
-      source: readBoundTab_(book, sourceTab),
-      history: readBoundTab_(book, historyTab),
+      source: readBoundTab_(SpreadsheetApp.openById(sourceSpreadsheetId), sourceTab),
+      history: readBoundTab_(SpreadsheetApp.openById(historySpreadsheetId), historyTab),
     };
     return jsonResponse_(200, response);
   } catch (error) {
