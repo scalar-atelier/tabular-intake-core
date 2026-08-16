@@ -7,7 +7,8 @@ This public repository contains only generic code and synthetic data. Customer h
 ## Install and verify
 
 ```sh
-python -m pip install scalar-tabular-intake==0.1.0
+python -m pip install \
+  "scalar-tabular-intake @ https://github.com/scalar-atelier/tabular-intake-core/releases/download/v0.1.0/scalar_tabular_intake-0.1.0-py3-none-any.whl"
 python -m unittest discover -s tests -v
 ```
 
