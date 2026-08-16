@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "scalar-tabular-intake-rules/v1",
+  "requiredFields": ["name", "phone", "date", "item"],
+  "closedItemValues": ["closed"],
+  "historyBlockValues": ["blocked"],
+  "phoneProfile": "kr_mobile",
+  "maxRows": 1000,
+  "maxCellChars": 1000
+}

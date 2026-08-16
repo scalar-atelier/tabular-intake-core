@@ -1,0 +1,10 @@
+source_id,submitted_at,name,phone,date,item,intake_status,review_codes,history_match
+1,2026-08-01T09:00:00Z,AliceExample,01012345678,1990-02-03,open,duplicate_candidate,exact_duplicate,
+2,2026-08-01T09:01:00Z,AliceExample,01012345678,1990-02-03,open,duplicate_candidate,exact_duplicate,
+4,2026-08-01T09:03:00Z,ChangedPhone,01020000001,1985-04-05,open,duplicate_candidate,name_date_match,
+5,2026-08-01T09:04:00Z,ChangedPhone,01020000002,1985-04-05,open,duplicate_candidate,name_date_match,
+6,2026-08-01T09:05:00Z,BadValues,,,open,information_review,missing_or_invalid_phone|missing_or_invalid_date,
+8,2026-08-01T09:07:00Z,BlockedPhone,01040000001,1970-05-06,open,blocked,blocked_phone,
+9,2026-08-01T09:08:00Z,BlockedIdentity,01050000001,1975-06-07,open,block_candidate,blocked_name_date,
+10,2026-08-01T09:09:00Z,,01060000001,1992-07-08,open,information_review,missing_or_invalid_name,
+11,2026-08-01T09:10:00Z,ClosedItem,01070000001,1993-08-09,closed,closed,closed_item,

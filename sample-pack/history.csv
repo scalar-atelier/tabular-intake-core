@@ -1,0 +1,4 @@
+history_id,disposition,name,phone,date,period,category
+h1,participant,Prior Participant,010-3000-0001,1980-03-04,2024,program-a
+h2,blocked,Blocked Phone,010-4000-0001,1970-05-06,,
+h3,blocked,Blocked Identity,,1975-06-07,,

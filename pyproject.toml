@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scalar-tabular-intake"
+version = "0.1.0"
+description = "Deterministic normalization and review classification for tabular intake data."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "SCALAR Atelier Co., Ltd." }]
+dependencies = []
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/scalar-atelier/tabular-intake-core"
+Issues = "https://github.com/scalar-atelier/tabular-intake-core/issues"
+
+[project.scripts]
+scalar-tabular-intake = "scalar_tabular_intake.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
