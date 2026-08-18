@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "scalar-tabular-intake-contract-vectors/v1",
+  "cases": [
+    {
+      "name": "source_header_row_generated_id_and_resident_date",
+      "input": "﻿설명,,,\r\n이름,전화,생년월일,항목\r\n\"홍 길동\",\"+82 10-1234-5678\",\"900203-1234567\",\"오전,열림\"\r\n",
+      "options": {
+        "kind": "source",
+        "headerMap": {"이름": "name", "전화": "phone", "생년월일": "date", "항목": "item"},
+        "headerRow": 2,
+        "generatedId": "row_number",
+        "preNormalizers": {"date": "kr_resident_or_date"}
+      },
+      "expected": "source_id,name,phone,date,item\n1,홍 길동,+82 10-1234-5678,1990-02-03,\"오전,열림\"\n"
+    },
+    {
+      "name": "history_copy_roles",
+      "input": "상태,사람,연락처,생년,그룹\nparticipant,홍 길동,010-1234-5678,900203-1234567,A\n",
+      "options": {
+        "kind": "history",
+        "headerMap": {"상태": "disposition", "사람": "name", "연락처": "phone", "생년": "date"},
+        "generatedId": "row_number",
+        "copyRoles": {"period": "상태", "category": "그룹"},
+        "preNormalizers": {"date": "kr_resident_or_date"}
+      },
+      "expected": "history_id,disposition,name,phone,date,period,category\n1,participant,홍 길동,010-1234-5678,1990-02-03,participant,A\n"
+    }
+  ]
+}
