@@ -1,0 +1,47 @@
+{
+  "name": "@scalar-atelier/tabular-intake-core",
+  "version": "0.2.0",
+  "description": "Deterministic CSV intake normalization for Node.js and browsers.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/scalar-atelier/tabular-intake-core.git"
+  },
+  "homepage": "https://scalar-atelier.github.io/tabular-intake-core/",
+  "bugs": "https://github.com/scalar-atelier/tabular-intake-core/issues",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist-js/core.d.ts",
+      "import": "./dist-js/core.js"
+    }
+  },
+  "bin": {
+    "scalar-tabular-intake": "./dist-js/cli.js"
+  },
+  "files": [
+    "dist-js",
+    "sample-pack",
+    "contract-vectors",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:lib": "tsc -p tsconfig.json",
+    "build:demo": "tsc -p tsconfig.demo.json && node scripts/build-demo.mjs",
+    "build": "npm run build:lib && npm run build:demo",
+    "test": "npm run build && node --test js/test/*.test.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "csv-parse": "7.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
