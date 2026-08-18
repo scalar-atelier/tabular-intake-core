@@ -38,6 +38,8 @@ jobs:
           PYTHONPATH: src
       - run: npm test
       - run: python -m build
+        env:
+          SOURCE_DATE_EPOCH: "315532800"
       - name: Build release assets once
         env:
           SOURCE_TAG: v0.2.0
