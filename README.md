@@ -1,43 +1,78 @@
-# scalar-tabular-intake
+# tabular-intake-core
 
-Deterministic, dependency-free intake normalization for CSV or a read-only Google Sheets snapshot. It normalizes names, Korean mobile numbers, and dates; classifies exact and two-of-three duplicate candidates; preserves phone-only shared contacts; checks participant history and block records; and emits byte-stable normalized/review CSV plus a result manifest.
+Deterministic CSV normalization and review classification for real intake rosters. It runs in Python, Node.js, or directly in a browser and emits byte-stable `normalized.csv`, `review.csv`, and a SHA-256 result manifest.
 
-This public repository contains only generic code and synthetic data. Customer headers, tab names, deployment IDs, credentials, operational wording, and applicant data belong in a private pack and binding.
+[Try the install-free demo](https://scalar-atelier.github.io/tabular-intake-core/) · [Company demo](https://scalar-atelier.com/demo/tabular-intake)
 
-## Install and verify
+Files selected in the demo stay in browser memory. There is no upload, account, API key, telemetry, browser storage, or AI header inference.
 
-```sh
-python -m pip install \
-  "scalar-tabular-intake @ https://github.com/scalar-atelier/tabular-intake-core/releases/download/v0.1.0/scalar_tabular_intake-0.1.0-py3-none-any.whl"
-python -m unittest discover -s tests -v
-```
-
-The package uses only the Python standard library. Its trust-boundary parsers reject unknown canonical headers, unknown rule fields, duplicate IDs, oversized input, and malformed snapshots before processing.
-
-## Run the synthetic pack
+## Install
 
 ```sh
-scalar-tabular-intake \
-  sample-pack/source.csv \
-  sample-pack/history.csv \
-  sample-pack/rules.json \
-  out
+python -m pip install scalar-tabular-intake==0.2.0
+npm install @scalar-atelier/tabular-intake-core@0.2.0
 ```
 
-The public API is `run_csv_intake(source_bytes, history_bytes, rules)`. A Google Apps Script response is converted through `canonical_csv_from_snapshot(...)`; the test suite proves that the CSV and snapshot routes produce identical output bytes and hashes.
+The package release is `0.2.0`. The deterministic transformation contract remains `CORE_VERSION=0.1.0`, so existing WorkPacks and their output hashes remain compatible.
 
-## Google Sheets bridge
+## Run
 
-[`apps-script/read_bridge.gs`](apps-script/read_bridge.gs) supports one HMAC-authenticated `snapshot_v1` action. Spreadsheet ID and the source/history tab names are Script Properties fixed by the deployer, never request fields. The bridge reads only those two tabs, writes nothing, installs no trigger, calls no SMS or external service, and returns no logs containing row data.
+One source CSV, with optional history:
 
-Deploy it as a web app that executes as the deployer. Set separate `SNAPSHOT_SOURCE_SPREADSHEET_ID` and `SNAPSHOT_HISTORY_SPREADSHEET_ID` properties when the two bound tabs live in different files; `SNAPSHOT_SPREADSHEET_ID` is the shorthand for one file. Keep its endpoint and shared secret outside packs and bindings. Clients must restrict the initial URL to `script.google.com` and only follow Google ContentService redirects to `script.googleusercontent.com`.
+```sh
+scalar-tabular-intake run \
+  --source sample-pack/source.csv \
+  --history sample-pack/history.csv \
+  --rules sample-pack/rules.json \
+  --output out
+```
+
+The original four-positional Python CLI remains supported.
+
+```python
+from scalar_tabular_intake import canonicalize_csv, run_intake
+
+source = canonicalize_csv(
+    raw_csv,
+    kind="source",
+    header_map={"신청자": "name", "전화": "phone", "생년월일": "date", "선택": "item"},
+    generated_id="row_number",
+)
+result = run_intake(source, rules)  # history is optional
+```
+
+```js
+import { canonicalizeCsv, runIntake } from "@scalar-atelier/tabular-intake-core";
+
+const source = canonicalizeCsv(rawBytes, {
+  kind: "source",
+  headerMap: { 신청자: "name", 전화: "phone", 생년월일: "date", 선택: "item" },
+  generatedId: "row_number",
+});
+const result = await runIntake({ source, rules });
+```
+
+`canonicalize_csv` / `canonicalizeCsv` also support a header row, copied roles, and the explicit `kr_resident_or_date` pre-normalizer. They never infer a mapping.
+
+## Contract and safety
+
+- Normalizes names, Korean mobile numbers, and dates.
+- Classifies exact and two-of-three duplicate candidates while preserving phone-only shared contacts.
+- Checks participant and block history when a history CSV is supplied.
+- Keeps the v0.1 normalized/review/manifest bytes as shared Python–TypeScript golden vectors.
+- Rejects invalid UTF-8, malformed or ragged CSV, ambiguous mappings, duplicate IDs, oversized inputs, oversized rules, and formula-leading output cells.
+- Limits each input to 20MiB, 100,000 data rows, 256 columns, and 50,000 characters per cell.
+
+This repository contains only generic code and synthetic data. Customer headers, tab names, IDs, credentials, operational wording, and applicant data belong in a private binding.
+
+## Read-only Google Sheets bridge
+
+[`apps-script/read_bridge.gs`](apps-script/read_bridge.gs) exposes one HMAC-authenticated `snapshot_v1` action. Spreadsheet IDs and tab names are deployer-owned Script Properties, never request fields. The bridge reads the fixed source/history tabs and performs no write, trigger, SMS, or arbitrary external call.
 
 ## Non-goals
 
-- Spreadsheet writeback or trigger installation
-- SMS delivery
-- OAuth or credential storage
-- Arbitrary Python/code execution from packs
-- Customer-specific status labels or header inference
+- Header inference, LLM rule generation, or arbitrary code execution
+- Spreadsheet writeback, trigger installation, OAuth, or credential storage
+- Customer-specific labels or data in the public package
 
 MIT licensed.

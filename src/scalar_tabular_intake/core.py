@@ -10,10 +10,17 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Iterable, Mapping, Sequence
 
+PACKAGE_VERSION = "0.2.0"
 CORE_VERSION = "0.1.0"
 RULE_SCHEMA = "scalar-tabular-intake-rules/v1"
 MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1"
 MAX_INPUT_BYTES = 20 * 1024 * 1024
+MAX_ROWS = 100_000
+MAX_COLUMNS = 256
+MAX_CELL_CHARS = 50_000
+MAX_RULE_ITEMS = 100
+MAX_RULE_ITEM_CHARS = 200
+MAX_HEADER_ROW = 100
 
 SOURCE_REQUIRED = ("source_id", "name", "phone", "date", "item")
 SOURCE_OPTIONAL = ("submitted_at",)
@@ -82,7 +89,7 @@ def normalize_name(value: object) -> str:
 
 def normalize_phone(value: object, profile: str = "kr_mobile") -> str:
     if profile != "kr_mobile":
-        raise IntakeError("unknown_rule", f"unsupported phone profile: {profile}")
+        raise IntakeError("invalid_rules", f"unsupported phone profile: {profile}")
     digits = re.sub(r"\D", "", _text(value))
     if re.fullmatch(r"10\d{8}", digits):
         digits = "0" + digits
@@ -110,35 +117,38 @@ def normalize_date(value: object) -> str:
 
 def _rules(value: Mapping[str, object]) -> Rules:
     if not isinstance(value, Mapping):
-        raise IntakeError("unknown_rule", "rules must be an object")
+        raise IntakeError("invalid_rules", "rules must be an object")
     unknown = set(value) - RULE_KEYS
     if unknown:
-        raise IntakeError("unknown_rule", f"unknown rule fields: {', '.join(sorted(unknown))}")
+        raise IntakeError("invalid_rules", f"unknown rule fields: {', '.join(sorted(unknown))}")
     if value.get("schemaVersion") != RULE_SCHEMA:
-        raise IntakeError("unknown_rule", "unsupported rule schema")
+        raise IntakeError("invalid_rules", "unsupported rule schema")
     required = value.get("requiredFields")
     if not isinstance(required, list) or not required:
-        raise IntakeError("unknown_rule", "requiredFields must be a non-empty list")
+        raise IntakeError("invalid_rules", "requiredFields must be a non-empty list")
     allowed_required = {"name", "phone", "date", "item"}
     if any(not isinstance(item, str) or item not in allowed_required for item in required):
-        raise IntakeError("unknown_rule", "requiredFields contains an unknown field")
+        raise IntakeError("invalid_rules", "requiredFields contains an unknown field")
     if len(set(required)) != len(required):
-        raise IntakeError("unknown_rule", "requiredFields contains duplicates")
+        raise IntakeError("invalid_rules", "requiredFields contains duplicates")
 
     def string_set(key: str) -> frozenset[str]:
         raw = value.get(key, [])
         if not isinstance(raw, list) or any(not isinstance(item, str) or not item.strip() for item in raw):
-            raise IntakeError("unknown_rule", f"{key} must contain non-empty strings")
+            raise IntakeError("invalid_rules", f"{key} must contain non-empty strings")
+        if len(raw) > MAX_RULE_ITEMS or any(len(item.strip()) > MAX_RULE_ITEM_CHARS for item in raw):
+            raise IntakeError("limit_exceeded", f"{key} exceeds its public limits")
         return frozenset(item.strip() for item in raw)
 
     if value.get("phoneProfile") != "kr_mobile":
-        raise IntakeError("unknown_rule", "phoneProfile must be kr_mobile")
+        raise IntakeError("invalid_rules", "phoneProfile must be kr_mobile")
     max_rows = value.get("maxRows", 50_000)
     max_cell_chars = value.get("maxCellChars", 10_000)
-    if not isinstance(max_rows, int) or isinstance(max_rows, bool) or not 1 <= max_rows <= 100_000:
-        raise IntakeError("unknown_rule", "maxRows is outside 1..100000")
-    if not isinstance(max_cell_chars, int) or isinstance(max_cell_chars, bool) or not 1 <= max_cell_chars <= 100_000:
-        raise IntakeError("unknown_rule", "maxCellChars is outside 1..100000")
+    if not isinstance(max_rows, int) or isinstance(max_rows, bool) or not 1 <= max_rows <= MAX_ROWS:
+        raise IntakeError("invalid_rules", f"maxRows is outside 1..{MAX_ROWS}")
+    if (not isinstance(max_cell_chars, int) or isinstance(max_cell_chars, bool)
+            or not 1 <= max_cell_chars <= MAX_CELL_CHARS):
+        raise IntakeError("invalid_rules", f"maxCellChars is outside 1..{MAX_CELL_CHARS}")
     return Rules(
         required_fields=tuple(required),
         closed_item_values=string_set("closedItemValues"),
@@ -148,19 +158,35 @@ def _rules(value: Mapping[str, object]) -> Rules:
     )
 
 
-def _csv_rows(data: bytes, kind: str, rules: Rules) -> list[dict[str, str]]:
+def _csv_table(data: bytes, kind: str) -> list[list[str]]:
+    if not isinstance(data, bytes):
+        raise IntakeError("malformed_csv", f"{kind} CSV must be bytes")
     if len(data) > MAX_INPUT_BYTES:
-        raise IntakeError("oversized_input", f"{kind} CSV exceeds {MAX_INPUT_BYTES} bytes")
+        raise IntakeError("limit_exceeded", f"{kind} CSV exceeds {MAX_INPUT_BYTES} bytes")
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        raise IntakeError("invalid_csv", f"{kind} CSV must be UTF-8") from exc
-    reader = csv.DictReader(io.StringIO(text, newline=""))
+        raise IntakeError("invalid_utf8", f"{kind} CSV must be UTF-8") from exc
+    try:
+        table = list(csv.reader(io.StringIO(text, newline=""), strict=True))
+    except csv.Error as exc:
+        raise IntakeError("malformed_csv", f"{kind} CSV is malformed") from exc
+    if len(table) > MAX_ROWS + MAX_HEADER_ROW + 1:
+        raise IntakeError("limit_exceeded", f"{kind} CSV exceeds {MAX_ROWS} data rows")
+    if any(len(row) > MAX_COLUMNS for row in table):
+        raise IntakeError("limit_exceeded", f"{kind} CSV exceeds {MAX_COLUMNS} columns")
+    if any(len(cell) > MAX_CELL_CHARS for row in table for cell in row):
+        raise IntakeError("limit_exceeded", f"{kind} CSV contains a cell over {MAX_CELL_CHARS} characters")
+    return table
+
+
+def _csv_rows(data: bytes, kind: str, rules: Rules) -> list[dict[str, str]]:
+    table = _csv_table(data, kind)
     required = SOURCE_REQUIRED if kind == "source" else HISTORY_REQUIRED
     optional = SOURCE_OPTIONAL if kind == "source" else HISTORY_OPTIONAL
-    headers = tuple(reader.fieldnames or ())
+    headers = tuple(_text(item) for item in (table[0] if table else ()))
     if len(headers) != len(set(headers)) or any(not header for header in headers):
-        raise IntakeError("unknown_header", f"{kind} CSV has duplicate or blank headers")
+        raise IntakeError("invalid_header_mapping", f"{kind} CSV has duplicate or blank headers")
     missing = set(required) - set(headers)
     unknown = set(headers) - set(required) - set(optional)
     if missing or unknown:
@@ -169,24 +195,132 @@ def _csv_rows(data: bytes, kind: str, rules: Rules) -> list[dict[str, str]]:
             detail.append("missing=" + ",".join(sorted(missing)))
         if unknown:
             detail.append("unknown=" + ",".join(sorted(unknown)))
-        raise IntakeError("unknown_header", f"{kind} CSV header mismatch ({'; '.join(detail)})")
+        raise IntakeError("invalid_header_mapping", f"{kind} CSV header mismatch ({'; '.join(detail)})")
     rows: list[dict[str, str]] = []
     seen_ids: set[str] = set()
     id_field = "source_id" if kind == "source" else "history_id"
-    for raw in reader:
-        if len(rows) >= rules.max_rows:
-            raise IntakeError("oversized_input", f"{kind} CSV exceeds maxRows")
-        row = {header: _text(raw.get(header)) for header in headers}
-        if any(len(cell) > rules.max_cell_chars for cell in row.values()):
-            raise IntakeError("oversized_input", f"{kind} CSV contains an oversized cell")
-        if not any(row.values()):
+    for raw in table[1:]:
+        if not raw or not any(_text(cell) for cell in raw):
             continue
+        if len(raw) != len(headers):
+            raise IntakeError("row_width_mismatch", f"{kind} CSV row width differs from its header")
+        if len(rows) >= rules.max_rows:
+            raise IntakeError("limit_exceeded", f"{kind} CSV exceeds maxRows")
+        row = {header: _text(raw[index]) for index, header in enumerate(headers)}
+        if any(len(cell) > rules.max_cell_chars for cell in row.values()):
+            raise IntakeError("limit_exceeded", f"{kind} CSV contains an oversized cell")
         identifier = row[id_field]
         if not identifier or identifier in seen_ids:
-            raise IntakeError("invalid_csv", f"{kind} {id_field} must be non-empty and unique")
+            raise IntakeError("malformed_csv", f"{kind} {id_field} must be non-empty and unique")
         seen_ids.add(identifier)
         rows.append(row)
     return rows
+
+
+def _resident_or_date(value: object) -> str:
+    digits = re.sub(r"\D", "", str(value or ""))
+    if len(digits) == 13:
+        century = "19" if digits[6] in "1256" else "20" if digits[6] in "3478" else ""
+        if century:
+            return normalize_date(century + digits[:6])
+    return str(value or "")
+
+
+def _canonicalize_table(
+    headers: Sequence[object],
+    rows: Sequence[Sequence[object]],
+    header_map: Mapping[str, str],
+    kind: str,
+    *,
+    generated_id: str | None = None,
+    copy_roles: Mapping[str, str] | None = None,
+    pre_normalizers: Mapping[str, str] | None = None,
+) -> bytes:
+    if kind not in {"source", "history"}:
+        raise IntakeError("invalid_header_mapping", "CSV kind must be source or history")
+    if len(headers) > MAX_COLUMNS or len(rows) > MAX_ROWS:
+        raise IntakeError("limit_exceeded", "CSV table exceeds its public limits")
+    raw_headers = [_text(header) for header in headers]
+    if not raw_headers or len(raw_headers) != len(set(raw_headers)) or any(not item for item in raw_headers):
+        raise IntakeError("invalid_header_mapping", "CSV has duplicate or blank headers")
+    if any(len(item) > MAX_CELL_CHARS for item in raw_headers):
+        raise IntakeError("limit_exceeded", "CSV contains an oversized header")
+    if not isinstance(header_map, Mapping):
+        raise IntakeError("invalid_header_mapping", "header map must be an object")
+    allowed_order = SOURCE_REQUIRED + SOURCE_OPTIONAL if kind == "source" else HISTORY_REQUIRED + HISTORY_OPTIONAL
+    allowed = set(allowed_order)
+    mapping = {_text(raw): _text(role) for raw, role in header_map.items()}
+    if (not mapping or set(mapping.values()) - allowed or len(set(mapping.values())) != len(mapping)
+            or any(not raw or not role for raw, role in mapping.items())):
+        raise IntakeError("invalid_header_mapping", "header map contains unknown, blank, or duplicate roles")
+    if set(mapping) - set(raw_headers):
+        raise IntakeError("invalid_header_mapping", "CSV is missing a bound header")
+
+    copies = {_text(role): _text(raw) for role, raw in (copy_roles or {}).items()}
+    if (set(copies) - allowed or any(not raw or raw not in raw_headers for raw in copies.values())
+            or set(copies) & set(mapping.values())):
+        raise IntakeError("invalid_header_mapping", "copy roles contain an unknown or duplicate role")
+    if generated_id not in {None, "row_number"}:
+        raise IntakeError("invalid_header_mapping", "generated ID must be row_number")
+    id_role = "source_id" if kind == "source" else "history_id"
+    if generated_id and (id_role in mapping.values() or id_role in copies):
+        raise IntakeError("invalid_header_mapping", "generated ID duplicates a mapped role")
+    supplied = set(mapping.values()) | set(copies)
+    if generated_id:
+        supplied.add(id_role)
+    required = set(SOURCE_REQUIRED if kind == "source" else HISTORY_REQUIRED)
+    if required - supplied:
+        raise IntakeError("invalid_header_mapping", "header map is missing a required role")
+
+    normalizers = dict(pre_normalizers or {})
+    if set(normalizers) - {"date"} or any(value != "kr_resident_or_date" for value in normalizers.values()):
+        raise IntakeError("invalid_header_mapping", "unsupported pre-normalizer")
+    if "date" in normalizers and "date" not in supplied:
+        raise IntakeError("invalid_header_mapping", "date pre-normalizer has no date role")
+
+    indexes = {header: index for index, header in enumerate(raw_headers)}
+    ordered_roles = [role for role in allowed_order if role in supplied]
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=ordered_roles, lineterminator="\n")
+    writer.writeheader()
+    for row_number, row in enumerate(rows, start=1):
+        if len(row) != len(raw_headers):
+            raise IntakeError("row_width_mismatch", "CSV row width does not match its headers")
+        values = [_text(item) for item in row]
+        if any(len(item) > MAX_CELL_CHARS for item in values):
+            raise IntakeError("limit_exceeded", "CSV contains an oversized cell")
+        mapped = {role: values[indexes[raw]] for raw, role in mapping.items()}
+        mapped.update({role: values[indexes[raw]] for role, raw in copies.items()})
+        if generated_id:
+            mapped[id_role] = str(row_number)
+        if normalizers.get("date"):
+            mapped["date"] = _resident_or_date(mapped.get("date"))
+        writer.writerow(mapped)
+    result = buffer.getvalue().encode("utf-8")
+    if len(result) > MAX_INPUT_BYTES:
+        raise IntakeError("limit_exceeded", "canonical CSV exceeds the public byte limit")
+    return result
+
+
+def canonicalize_csv(
+    data: bytes,
+    *,
+    kind: str,
+    header_map: Mapping[str, str],
+    header_row: int = 1,
+    generated_id: str | None = None,
+    copy_roles: Mapping[str, str] | None = None,
+    pre_normalizers: Mapping[str, str] | None = None,
+) -> bytes:
+    if not isinstance(header_row, int) or isinstance(header_row, bool) or not 1 <= header_row <= MAX_HEADER_ROW:
+        raise IntakeError("invalid_header_mapping", f"header_row must be inside 1..{MAX_HEADER_ROW}")
+    table = _csv_table(data, kind)
+    if header_row > len(table):
+        raise IntakeError("invalid_header_mapping", "CSV does not contain the configured header row")
+    return _canonicalize_table(
+        table[header_row - 1], table[header_row:], header_map, kind,
+        generated_id=generated_id, copy_roles=copy_roles, pre_normalizers=pre_normalizers,
+    )
 
 
 def canonical_csv_from_snapshot(
@@ -195,30 +329,7 @@ def canonical_csv_from_snapshot(
     header_map: Mapping[str, str],
     kind: str,
 ) -> bytes:
-    if kind not in {"source", "history"}:
-        raise IntakeError("unknown_adapter", "snapshot kind must be source or history")
-    raw_headers = [_text(header) for header in headers]
-    if not raw_headers or len(raw_headers) != len(set(raw_headers)) or any(not item for item in raw_headers):
-        raise IntakeError("unknown_header", "snapshot has duplicate or blank headers")
-    allowed = set(SOURCE_REQUIRED + SOURCE_OPTIONAL if kind == "source" else HISTORY_REQUIRED + HISTORY_OPTIONAL)
-    if set(header_map.values()) - allowed or len(set(header_map.values())) != len(header_map):
-        raise IntakeError("unknown_header", "header map contains unknown or duplicate roles")
-    if set(header_map) - set(raw_headers):
-        raise IntakeError("unknown_header", "snapshot is missing a bound header")
-    required = set(SOURCE_REQUIRED if kind == "source" else HISTORY_REQUIRED)
-    if required - set(header_map.values()):
-        raise IntakeError("unknown_header", "header map is missing a required role")
-    selected = [(raw_headers.index(raw), role) for raw, role in header_map.items()]
-    ordered_roles = [role for role in (SOURCE_REQUIRED + SOURCE_OPTIONAL if kind == "source" else HISTORY_REQUIRED + HISTORY_OPTIONAL) if role in header_map.values()]
-    buffer = io.StringIO(newline="")
-    writer = csv.DictWriter(buffer, fieldnames=ordered_roles, lineterminator="\n")
-    writer.writeheader()
-    for row in rows:
-        if len(row) != len(raw_headers):
-            raise IntakeError("invalid_csv", "snapshot row width does not match its headers")
-        mapped = {role: _text(row[index]) for index, role in selected}
-        writer.writerow(mapped)
-    return buffer.getvalue().encode("utf-8")
+    return _canonicalize_table(headers, rows, header_map, kind)
 
 
 def _history_index(rows: Iterable[Mapping[str, str]], rules: Rules) -> tuple[dict[str, list[str]], dict[str, list[str]], set[str], set[str]]:
@@ -251,6 +362,11 @@ def _unique(values: Iterable[str]) -> str:
 
 
 def _csv_bytes(rows: Sequence[Mapping[str, str]]) -> bytes:
+    for row in rows:
+        for field in OUTPUT_FIELDS:
+            value = str(row.get(field, ""))
+            if re.match(r"^[\x00-\x20]*[=+@-]", value):
+                raise IntakeError("unsafe_spreadsheet_cell", f"unsafe spreadsheet value in {field}")
     buffer = io.StringIO(newline="")
     writer = csv.DictWriter(buffer, fieldnames=OUTPUT_FIELDS, lineterminator="\n")
     writer.writeheader()
@@ -363,3 +479,14 @@ def run_csv_intake(source_csv: bytes, history_csv: bytes, rule_value: Mapping[st
         manifest_json=_canonical_json(manifest) + b"\n",
         summary=summary,
     )
+
+
+EMPTY_HISTORY_CSV = b"history_id,disposition,name,phone,date,period,category\n"
+
+
+def run_intake(
+    source_csv: bytes,
+    rule_value: Mapping[str, object],
+    history_csv: bytes | None = None,
+) -> IntakeOutput:
+    return run_csv_intake(source_csv, EMPTY_HISTORY_CSV if history_csv is None else history_csv, rule_value)

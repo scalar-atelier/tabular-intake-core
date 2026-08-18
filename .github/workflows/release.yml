@@ -1,0 +1,86 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  pages: write
+
+jobs:
+  publish:
+    if: github.ref == 'refs/tags/v0.2.0'
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+      - name: Verify release versions
+        run: |
+          python - <<'PY'
+          import pathlib, tomllib
+          assert tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"] == "0.2.0"
+          PY
+          node -e "if (require('./package.json').version !== '0.2.0') process.exit(1)"
+      - run: python -m pip install build
+      - run: npm ci
+      - run: python -m unittest discover -s tests -v
+        env:
+          PYTHONPATH: src
+      - run: npm test
+      - run: python -m build
+        env:
+          SOURCE_DATE_EPOCH: "315532800"
+      - name: Build release assets once
+        env:
+          SOURCE_TAG: v0.2.0
+        run: |
+          npm pack
+          (cd demo-dist && zip -qr ../tabular-intake-demo-v0.2.0.zip .)
+          sha256sum dist/* scalar-atelier-tabular-intake-core-0.2.0.tgz tabular-intake-demo-v0.2.0.zip > SHA256SUMS
+      - name: Smoke install built artifacts
+        run: |
+          python -m venv /tmp/tabular-intake-release
+          /tmp/tabular-intake-release/bin/pip install dist/scalar_tabular_intake-0.2.0-py3-none-any.whl
+          /tmp/tabular-intake-release/bin/scalar-tabular-intake --help
+          mkdir /tmp/tabular-intake-npm
+          npm install --prefix /tmp/tabular-intake-npm ./scalar-atelier-tabular-intake-core-0.2.0.tgz
+          /tmp/tabular-intake-npm/node_modules/.bin/scalar-tabular-intake 2>&1 | grep -q '^usage:'
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create v0.2.0 --draft --title "tabular-intake-core v0.2.0"
+          --notes "Python, Node.js, and install-free browser release. Distribution 0.2.0 preserves deterministic core contract 0.1.0."
+          dist/* scalar-atelier-tabular-intake-core-0.2.0.tgz tabular-intake-demo-v0.2.0.zip SHA256SUMS
+      - name: Publish Python package
+        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish npm package
+        run: npm publish ./scalar-atelier-tabular-intake-core-0.2.0.tgz --access public --provenance
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit v0.2.0 --draft=false
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: demo-dist
+
+  pages:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

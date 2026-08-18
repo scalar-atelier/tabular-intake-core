@@ -3,16 +3,23 @@ from __future__ import annotations
 import csv
 import io
 import json
+import hashlib
+import tempfile
 import unittest
 from pathlib import Path
 
 from scalar_tabular_intake import (
+    CORE_VERSION,
+    PACKAGE_VERSION,
     IntakeError,
+    canonicalize_csv,
     canonical_csv_from_snapshot,
     normalize_date,
     normalize_phone,
+    run_intake,
     run_csv_intake,
 )
+from scalar_tabular_intake.__main__ import main as cli_main
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE = ROOT / "sample-pack"
@@ -79,16 +86,90 @@ class IntakeCoreTest(unittest.TestCase):
         unknown_rule = {**self.rules, "futureGuess": True}
         with self.assertRaisesRegex(IntakeError, "unknown rule fields") as rule_error:
             run_csv_intake(self.source, self.history, unknown_rule)
-        self.assertEqual(rule_error.exception.code, "unknown_rule")
+        self.assertEqual(rule_error.exception.code, "invalid_rules")
 
         unknown_header = self.source.replace(b"source_id,name", b"source_id,unexpected")
         with self.assertRaises(IntakeError) as header_error:
             run_csv_intake(unknown_header, self.history, self.rules)
-        self.assertEqual(header_error.exception.code, "unknown_header")
+        self.assertEqual(header_error.exception.code, "invalid_header_mapping")
 
         with self.assertRaises(IntakeError) as size_error:
             run_csv_intake(self.source, self.history, {**self.rules, "maxRows": 1})
-        self.assertEqual(size_error.exception.code, "oversized_input")
+        self.assertEqual(size_error.exception.code, "limit_exceeded")
+
+    def test_public_adapter_vectors_and_optional_history(self) -> None:
+        vectors = json.loads(
+            (ROOT / "contract-vectors" / "v1" / "canonicalization.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(vectors["schemaVersion"], "scalar-tabular-intake-contract-vectors/v1")
+        for case in vectors["cases"]:
+            options = case["options"]
+            actual = canonicalize_csv(
+                case["input"].encode(),
+                kind=options["kind"],
+                header_map=options["headerMap"],
+                header_row=options.get("headerRow", 1),
+                generated_id=options.get("generatedId"),
+                copy_roles=options.get("copyRoles"),
+                pre_normalizers=options.get("preNormalizers"),
+            )
+            self.assertEqual(actual, case["expected"].encode(), case["name"])
+
+        source = b"source_id,name,phone,date,item\n1,Example,010-1234-5678,1990-02-03,open\n"
+        result = run_intake(source, self.rules)
+        self.assertEqual(result.summary["processed"], 1)
+        self.assertEqual(json.loads(result.manifest_json)["coreVersion"], "0.1.0")
+        self.assertEqual((PACKAGE_VERSION, CORE_VERSION), ("0.2.0", "0.1.0"))
+
+    def test_trust_boundary_error_codes_and_input_immutability(self) -> None:
+        original = b"name,phone,date,item\nExample,010-1234-5678,1990-02-03,open\n"
+        before = hashlib.sha256(original).hexdigest()
+        canonicalize_csv(
+            original, kind="source",
+            header_map={"name": "name", "phone": "phone", "date": "date", "item": "item"},
+            generated_id="row_number",
+        )
+        self.assertEqual(hashlib.sha256(original).hexdigest(), before)
+
+        cases = (
+            (b"\xff", "invalid_utf8"),
+            (b'name,phone,date,item\n"unterminated', "malformed_csv"),
+            (b"name,phone,date,item\nExample,010-1234-5678,1990-02-03\n", "row_width_mismatch"),
+            (b"name,name,phone,date,item\nA,A,010-1234-5678,1990-02-03,open\n", "invalid_header_mapping"),
+        )
+        options = {
+            "kind": "source",
+            "header_map": {"name": "name", "phone": "phone", "date": "date", "item": "item"},
+            "generated_id": "row_number",
+        }
+        for value, code in cases:
+            with self.assertRaises(IntakeError) as error:
+                canonicalize_csv(value, **options)
+            self.assertEqual(error.exception.code, code)
+
+        unsafe = b"source_id,name,phone,date,item\n1,Example,010-1234-5678,1990-02-03,=CMD()\n"
+        with self.assertRaises(IntakeError) as formula_error:
+            run_intake(unsafe, self.rules)
+        self.assertEqual(formula_error.exception.code, "unsafe_spreadsheet_cell")
+
+        too_many = [str(index) for index in range(101)]
+        with self.assertRaises(IntakeError) as limit_error:
+            run_intake(self.source, {**self.rules, "closedItemValues": too_many})
+        self.assertEqual(limit_error.exception.code, "limit_exceeded")
+
+    def test_new_cli_accepts_a_source_without_history(self) -> None:
+        source = b"source_id,name,phone,date,item\n1,Example,010-1234-5678,1990-02-03,open\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "source.csv").write_bytes(source)
+            (root / "rules.json").write_text(json.dumps(self.rules), encoding="utf-8")
+            cli_main([
+                "run", "--source", str(root / "source.csv"), "--rules", str(root / "rules.json"),
+                "--output", str(root / "out"),
+            ])
+            self.assertTrue((root / "out" / "normalized.csv").is_file())
+            self.assertTrue((root / "out" / "review.csv").is_file())
+            self.assertTrue((root / "out" / "result-manifest.json").is_file())
 
     def test_public_tree_has_no_client_canary_and_bridge_has_no_writes(self) -> None:
         import base64
@@ -101,7 +182,7 @@ class IntakeCoreTest(unittest.TestCase):
         for path in ROOT.rglob("*"):
             if not path.is_file() or path == Path(__file__) or ".git" in path.parts:
                 continue
-            if path.suffix not in {".py", ".json", ".csv", ".md", ".gs", ".toml"}:
+            if path.suffix not in {".py", ".json", ".csv", ".md", ".gs", ".toml", ".ts", ".mjs", ".html", ".css", ".yml"}:
                 continue
             text = path.read_text(encoding="utf-8")
             for canary in canaries:
