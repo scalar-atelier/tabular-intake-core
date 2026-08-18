@@ -52,6 +52,7 @@ jobs:
         env:
           SOURCE_TAG: v0.2.0
         run: |
+          npm run build:demo
           npm pack
           (cd demo-dist && zip -qr ../tabular-intake-demo-v0.2.0.zip .)
           sha256sum dist/* scalar-atelier-tabular-intake-core-0.2.0.tgz tabular-intake-demo-v0.2.0.zip > SHA256SUMS
