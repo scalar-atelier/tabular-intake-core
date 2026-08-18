@@ -2,7 +2,7 @@
 
 Deterministic CSV normalization and review classification for real intake rosters. It runs in Python, Node.js, or directly in a browser and emits byte-stable `normalized.csv`, `review.csv`, and a SHA-256 result manifest.
 
-[Try the install-free demo](https://scalar-atelier.github.io/tabular-intake-core/) · [Company demo](https://scalar-atelier.com/demo/tabular-intake)
+[Try the install-free demo](https://scalar-atelier.github.io/tabular-intake-core/) · [Company demo](https://scalar-inc.com/demo/tabular-intake/)
 
 Files selected in the demo stay in browser memory. There is no upload, account, API key, telemetry, browser storage, or AI header inference.
 
