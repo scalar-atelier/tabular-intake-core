@@ -1,11 +1,8 @@
 name: pages
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "demo-dist/**"
-      - ".github/workflows/pages.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -24,7 +21,18 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Download released demo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          mkdir demo-dist
+          if [ -n "$RELEASE_TAG" ]; then
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "tabular-intake-demo-*.zip"
+          else
+            gh release download --repo "$GITHUB_REPOSITORY" --pattern "tabular-intake-demo-*.zip"
+          fi
+          unzip -q tabular-intake-demo-*.zip -d demo-dist
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
