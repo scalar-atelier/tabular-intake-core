@@ -128,6 +128,10 @@ test("static demo is networkless and its build receipt matches its bytes", async
   for (const forbidden of ["fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket", "localStorage", "indexedDB", "serviceWorker"]) {
     assert.equal(source.includes(forbidden), false, forbidden);
   }
+  assert.match(source, /let generation = 0/);
+  assert.match(source, /function clearResult\(\)/);
+  assert.match(source, /anchor\.removeAttribute\("href"\)/);
+  assert.match(source, /type: "tabular-intake:close"/);
   for (const [name, expected] of Object.entries(manifest.files)) {
     const actual = createHash("sha256").update(await readFile(resolve(destination, name))).digest("hex");
     assert.equal(actual, expected, name);
