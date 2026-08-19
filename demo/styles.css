@@ -55,6 +55,7 @@ h1 { max-width: 760px; margin: 0 auto; font-family: Georgia, "Noto Serif KR", se
 .summary-card span { color: #62726b; font-size: .82rem; }
 .download-row { display: flex; flex-wrap: wrap; }
 .result-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.7rem; }
+.result-columns > section { min-width: 0; }
 .result-columns h3 { font-size: 1rem; }
 .table-wrap { max-height: 23rem; overflow: auto; border: 1px solid #d2dfd9; border-radius: .65rem; background: #fff; }
 table { width: 100%; border-collapse: collapse; font-size: .78rem; white-space: nowrap; }
