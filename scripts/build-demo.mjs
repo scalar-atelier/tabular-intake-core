@@ -30,7 +30,7 @@ const files = Object.fromEntries(await Promise.all(names.map(async name => [
 const sourceCommit = process.env.GITHUB_SHA || execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 await writeFile(resolve(output, "demo-build.json"), `${JSON.stringify({
   schemaVersion: "scalar-tabular-intake-demo-build/v1",
-  packageVersion: "0.2.1",
+  packageVersion: "0.2.2",
   coreVersion: "0.1.0",
   sourceTag: process.env.SOURCE_TAG || "dev",
   sourceCommit,

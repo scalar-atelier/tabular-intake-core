@@ -119,7 +119,7 @@ class IntakeCoreTest(unittest.TestCase):
         result = run_intake(source, self.rules)
         self.assertEqual(result.summary["processed"], 1)
         self.assertEqual(json.loads(result.manifest_json)["coreVersion"], "0.1.0")
-        self.assertEqual((PACKAGE_VERSION, CORE_VERSION), ("0.2.1", "0.1.0"))
+        self.assertEqual((PACKAGE_VERSION, CORE_VERSION), ("0.2.2", "0.1.0"))
 
     def test_trust_boundary_error_codes_and_input_immutability(self) -> None:
         original = b"name,phone,date,item\nExample,010-1234-5678,1990-02-03,open\n"
