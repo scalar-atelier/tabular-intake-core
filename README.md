@@ -9,11 +9,11 @@ Files selected in the demo stay in browser memory. There is no upload, account, 
 ## Install
 
 ```sh
-python -m pip install scalar-tabular-intake==0.2.0
-npm install @scalar-atelier/tabular-intake-core@0.2.0
+python -m pip install scalar-tabular-intake==0.2.1
+npm install @scalar-atelier/tabular-intake-core@0.2.1
 ```
 
-The package release is `0.2.0`. The deterministic transformation contract remains `CORE_VERSION=0.1.0`, so existing WorkPacks and their output hashes remain compatible.
+The package release is `0.2.1`. The deterministic transformation contract remains `CORE_VERSION=0.1.0`, so existing WorkPacks and their output hashes remain compatible.
 
 ## Run
 

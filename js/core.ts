@@ -1,6 +1,6 @@
 import { parse } from "csv-parse/browser/esm/sync";
 
-export const PACKAGE_VERSION = "0.2.0";
+export const PACKAGE_VERSION = "0.2.1";
 export const CORE_VERSION = "0.1.0";
 export const RULE_SCHEMA = "scalar-tabular-intake-rules/v1";
 export const MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1";
