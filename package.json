@@ -1,6 +1,6 @@
 {
   "name": "@scalar-atelier/tabular-intake-core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Deterministic CSV intake normalization for Node.js and browsers.",
   "type": "module",
   "license": "MIT",

@@ -45,7 +45,7 @@ test("Python golden pack stays byte-identical in TypeScript", async () => {
     blocked_candidate: 2,
     closed: 1,
   });
-  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.2.1", "0.1.0"]);
+  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.2.2", "0.1.0"]);
   assert.equal(normalizePhone("+82 10-1234-5678"), "01012345678");
   assert.equal(normalizeDate("1990. 2. 3"), "1990-02-03");
 });
@@ -128,6 +128,10 @@ test("static demo is networkless and its build receipt matches its bytes", async
   for (const forbidden of ["fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket", "localStorage", "indexedDB", "serviceWorker"]) {
     assert.equal(source.includes(forbidden), false, forbidden);
   }
+  assert.match(source, /let generation = 0/);
+  assert.match(source, /function clearResult\(\)/);
+  assert.match(source, /anchor\.removeAttribute\("href"\)/);
+  assert.match(source, /type: "tabular-intake:close"/);
   for (const [name, expected] of Object.entries(manifest.files)) {
     const actual = createHash("sha256").update(await readFile(resolve(destination, name))).digest("hex");
     assert.equal(actual, expected, name);

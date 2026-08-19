@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scalar-tabular-intake"
-version = "0.2.1"
+version = "0.2.2"
 description = "Deterministic normalization and review classification for tabular intake data."
 readme = "README.md"
 requires-python = ">=3.11"

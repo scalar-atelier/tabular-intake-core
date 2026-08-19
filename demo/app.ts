@@ -102,6 +102,7 @@ if (!(language in messages)) language = "ko";
 let sourceState: InputState = null;
 let historyState: InputState = null;
 let downloadUrls: string[] = [];
+let generation = 0;
 
 function message(key: keyof typeof messages.ko): string { return messages[language][key]; }
 
@@ -166,10 +167,21 @@ function renderMapping(kind: "source" | "history", state: NonNullable<InputState
 
 async function loadFile(kind: "source" | "history", file: File | undefined): Promise<void> {
   if (!file) return;
-  const state = inspect(new Uint8Array(await file.arrayBuffer()));
-  if (kind === "source") sourceState = state; else historyState = state;
-  renderMapping(kind, state);
-  $("#status").textContent = "";
+  const current = ++generation;
+  if (kind === "source") sourceState = null; else historyState = null;
+  for (const id of [`${kind}-info`, `${kind}-mapping`]) {
+    const element = $(`#${id}`); element.hidden = true; element.replaceChildren();
+  }
+  clearResult();
+  try {
+    const state = inspect(new Uint8Array(await file.arrayBuffer()));
+    if (current !== generation) return;
+    if (kind === "source") sourceState = state; else historyState = state;
+    renderMapping(kind, state);
+    $("#status").textContent = "";
+  } catch (error) {
+    if (current === generation) throw error;
+  }
 }
 
 function mapping(kind: "source" | "history"): Record<string, string> {
@@ -219,8 +231,7 @@ function renderTable(target: string, bytes: Uint8Array): void {
 }
 
 function showResult(result: IntakeOutput, elapsed: number, statusKey: "ready" | "sampleReady"): void {
-  downloadUrls.forEach(url => URL.revokeObjectURL(url));
-  downloadUrls = [];
+  clearResult();
   const downloads = [
     ["normalized", result.normalizedCsv, "normalized.csv", "text/csv"],
     ["review", result.reviewCsv, "review.csv", "text/csv"],
@@ -250,25 +261,41 @@ function showResult(result: IntakeOutput, elapsed: number, statusKey: "ready" | 
   $("#result-title").focus();
 }
 
+function clearResult(): void {
+  downloadUrls.forEach(url => URL.revokeObjectURL(url));
+  downloadUrls = [];
+  document.querySelectorAll<HTMLAnchorElement>("[data-download]").forEach(anchor => {
+    anchor.removeAttribute("href"); anchor.removeAttribute("download");
+  });
+  for (const id of ["summary", "normalized-preview", "review-preview", "manifest"]) $(`#${id}`).replaceChildren();
+  $("#result").hidden = true;
+}
+
 async function runFiles(): Promise<void> {
   if (!sourceState) throw new IntakeError("invalid_header_mapping", message("selectSource"));
+  const current = ++generation;
+  clearResult();
   const started = performance.now();
   const source = canonicalizeCsv(sourceState.bytes, { kind: "source", headerMap: mapping("source"), generatedId: "row_number" });
   const history = historyState
     ? canonicalizeCsv(historyState.bytes, { kind: "history", headerMap: mapping("history"), generatedId: "row_number" })
     : undefined;
-  showResult(await runIntake({ source, history, rules: rules() }), performance.now() - started, "ready");
+  const result = await runIntake({ source, history, rules: rules() });
+  if (current === generation) showResult(result, performance.now() - started, "ready");
 }
 
 async function runSample(): Promise<void> {
+  const current = ++generation;
+  clearResult();
   const started = performance.now();
-  showResult(await runCsvIntake(encode(sampleSource), encode(sampleHistory), sampleRules as RuleValue), performance.now() - started, "sampleReady");
+  const result = await runCsvIntake(encode(sampleSource), encode(sampleHistory), sampleRules as RuleValue);
+  if (current === generation) showResult(result, performance.now() - started, "sampleReady");
 }
 
 function reset(): void {
+  generation += 1;
   sourceState = null; historyState = null;
-  downloadUrls.forEach(url => URL.revokeObjectURL(url));
-  downloadUrls = [];
+  clearResult();
   for (const id of ["source-file", "history-file"]) $<HTMLInputElement>(`#${id}`).value = "";
   for (const id of ["source-info", "history-info", "source-mapping", "history-mapping", "result"]) {
     const element = $(id.startsWith("#") ? id : `#${id}`); element.hidden = true;
@@ -291,5 +318,8 @@ $("#reset").addEventListener("click", reset);
 const embedded = new URLSearchParams(location.search).get("atelier") === "1";
 $("#guided-intake").hidden = !embedded;
 $("#guided-intake").addEventListener("click", () => window.parent.postMessage({ type: "tabular-intake:open-guided" }, location.origin));
+if (embedded) window.addEventListener("keydown", event => {
+  if (event.key === "Escape") window.parent.postMessage({ type: "tabular-intake:close" }, location.origin);
+});
 $("#version").textContent = `package ${PACKAGE_VERSION} · contract ${CORE_VERSION}`;
 applyLanguage();
