@@ -83,7 +83,12 @@ jobs:
         run: |
           mkdir /tmp/tabular-intake-readback
           for attempt in $(seq 1 12); do
-            python -m pip download --no-cache-dir --no-deps --dest /tmp/tabular-intake-readback "scalar-tabular-intake==${RELEASE_VERSION}" && break
+            if python -m pip download --no-cache-dir --no-deps --only-binary=:all: \
+                 --dest /tmp/tabular-intake-readback "scalar-tabular-intake==${RELEASE_VERSION}" \
+               && python -m pip download --no-cache-dir --no-deps --no-binary=:all: \
+                 --dest /tmp/tabular-intake-readback "scalar-tabular-intake==${RELEASE_VERSION}"; then
+              break
+            fi
             [ "$attempt" -eq 12 ] && exit 1
             sleep 10
           done
