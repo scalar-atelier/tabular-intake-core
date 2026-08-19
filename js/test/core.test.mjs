@@ -45,7 +45,7 @@ test("Python golden pack stays byte-identical in TypeScript", async () => {
     blocked_candidate: 2,
     closed: 1,
   });
-  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.2.0", "0.1.0"]);
+  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.2.1", "0.1.0"]);
   assert.equal(normalizePhone("+82 10-1234-5678"), "01012345678");
   assert.equal(normalizeDate("1990. 2. 3"), "1990-02-03");
 });

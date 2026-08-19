@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Iterable, Mapping, Sequence
 
-PACKAGE_VERSION = "0.2.0"
+PACKAGE_VERSION = "0.2.1"
 CORE_VERSION = "0.1.0"
 RULE_SCHEMA = "scalar-tabular-intake-rules/v1"
 MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1"
