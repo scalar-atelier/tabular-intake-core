@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Iterable, Mapping, Sequence
 
-PACKAGE_VERSION = "0.2.2"
+PACKAGE_VERSION = "0.3.0"
 CORE_VERSION = "0.1.0"
 RULE_SCHEMA = "scalar-tabular-intake-rules/v1"
 MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1"
+TABLE_CLEANUP_PROFILE_SCHEMA = "scalar-table-cleanup-profile/v1"
+TABLE_CLEANUP_MANIFEST_SCHEMA = "scalar-table-cleanup-run/v1"
 MAX_INPUT_BYTES = 20 * 1024 * 1024
 MAX_ROWS = 100_000
 MAX_COLUMNS = 256
@@ -67,6 +69,33 @@ class Rules:
 class IntakeOutput:
     normalized_csv: bytes
     review_csv: bytes
+    manifest_json: bytes
+    summary: Mapping[str, int]
+
+
+@dataclass(frozen=True)
+class CleanupColumn:
+    source: str
+    output: str
+    transform: str
+    required: bool
+    enum_map: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class CleanupProfile:
+    columns: tuple[CleanupColumn, ...]
+    key_columns: tuple[str, ...]
+    blank_values: frozenset[str]
+    max_rows: int
+    max_cell_chars: int
+
+
+@dataclass(frozen=True)
+class TableCleanupOutput:
+    cleaned_csv: bytes
+    review_csv: bytes
+    comparison_csv: bytes
     manifest_json: bytes
     summary: Mapping[str, int]
 
@@ -490,3 +519,305 @@ def run_intake(
     history_csv: bytes | None = None,
 ) -> IntakeOutput:
     return run_csv_intake(source_csv, EMPTY_HISTORY_CSV if history_csv is None else history_csv, rule_value)
+
+
+_CLEANUP_PROFILE_KEYS = {
+    "schemaVersion", "columns", "keyColumns", "blankValues", "maxRows", "maxCellChars",
+}
+_CLEANUP_COLUMN_KEYS = {"source", "output", "transform", "required", "enumMap"}
+_CLEANUP_TRANSFORMS = {"text", "date_ymd", "number", "phone_kr", "enum"}
+_CLEANUP_RESERVED = {
+    "_atelier_status", "_atelier_review", "_atelier_change", "_atelier_changed_columns",
+}
+
+
+def _cleanup_profile(value: Mapping[str, object]) -> CleanupProfile:
+    if not isinstance(value, Mapping):
+        raise IntakeError("invalid_profile", "profile must be an object")
+    unknown = set(value) - _CLEANUP_PROFILE_KEYS
+    if unknown:
+        raise IntakeError("invalid_profile", f"unknown profile fields: {', '.join(sorted(unknown))}")
+    if value.get("schemaVersion") != TABLE_CLEANUP_PROFILE_SCHEMA:
+        raise IntakeError("invalid_profile", "unsupported profile schema")
+    raw_columns = value.get("columns")
+    if not isinstance(raw_columns, list) or not 1 <= len(raw_columns) <= MAX_COLUMNS:
+        raise IntakeError("invalid_profile", f"columns must contain 1..{MAX_COLUMNS} items")
+
+    columns: list[CleanupColumn] = []
+    seen_sources: set[str] = set()
+    seen_outputs: set[str] = set()
+    for raw in raw_columns:
+        if not isinstance(raw, Mapping) or set(raw) - _CLEANUP_COLUMN_KEYS:
+            raise IntakeError("invalid_profile", "column rules contain unknown fields")
+        source = _text(raw.get("source"))
+        output = _text(raw.get("output"))
+        transform = _text(raw.get("transform"))
+        required = raw.get("required", False)
+        if (not source or not output or len(source) > MAX_RULE_ITEM_CHARS or len(output) > MAX_RULE_ITEM_CHARS
+                or any(char in source + output for char in "\x00\r\n")):
+            raise IntakeError("invalid_profile", "column source and output must be short single-line strings")
+        if re.match(r"^[\x00-\x20]*[=+@-]", output) or output in _CLEANUP_RESERVED:
+            raise IntakeError("invalid_profile", "column output uses a reserved or unsafe name")
+        if source in seen_sources or output in seen_outputs:
+            raise IntakeError("invalid_profile", "column source and output names must be unique")
+        if transform not in _CLEANUP_TRANSFORMS or not isinstance(required, bool):
+            raise IntakeError("invalid_profile", "column transform or required flag is invalid")
+        raw_enum = raw.get("enumMap", {})
+        if not isinstance(raw_enum, Mapping) or len(raw_enum) > MAX_RULE_ITEMS:
+            raise IntakeError("invalid_profile", "enumMap must be a small object")
+        enum_map: dict[str, str] = {}
+        for enum_source, enum_output in raw_enum.items():
+            if not isinstance(enum_source, str) or not isinstance(enum_output, str):
+                raise IntakeError("invalid_profile", "enumMap keys and values must be strings")
+            enum_source, enum_output = enum_source.strip(), enum_output.strip()
+            if (not enum_source or not enum_output or len(enum_source) > MAX_RULE_ITEM_CHARS
+                    or len(enum_output) > MAX_RULE_ITEM_CHARS):
+                raise IntakeError("invalid_profile", "enumMap contains a blank or oversized item")
+            enum_map[enum_source] = enum_output
+        if (transform == "enum") != bool(enum_map):
+            raise IntakeError("invalid_profile", "enum transform requires enumMap and other transforms forbid it")
+        columns.append(CleanupColumn(source, output, transform, required, enum_map))
+        seen_sources.add(source)
+        seen_outputs.add(output)
+
+    raw_keys = value.get("keyColumns", [])
+    if (not isinstance(raw_keys, list) or len(raw_keys) > len(columns)
+            or any(not isinstance(item, str) or item not in seen_outputs for item in raw_keys)
+            or len(set(raw_keys)) != len(raw_keys)):
+        raise IntakeError("invalid_profile", "keyColumns must contain unique output column names")
+    raw_blanks = value.get("blankValues", ["", "-", "N/A", "n/a"])
+    if (not isinstance(raw_blanks, list) or len(raw_blanks) > MAX_RULE_ITEMS
+            or any(not isinstance(item, str) or len(item) > MAX_RULE_ITEM_CHARS for item in raw_blanks)):
+        raise IntakeError("invalid_profile", "blankValues must contain short strings")
+    max_rows = value.get("maxRows", 50_000)
+    max_cell_chars = value.get("maxCellChars", 10_000)
+    if not isinstance(max_rows, int) or isinstance(max_rows, bool) or not 1 <= max_rows <= MAX_ROWS:
+        raise IntakeError("invalid_profile", f"maxRows is outside 1..{MAX_ROWS}")
+    if (not isinstance(max_cell_chars, int) or isinstance(max_cell_chars, bool)
+            or not 1 <= max_cell_chars <= MAX_CELL_CHARS):
+        raise IntakeError("invalid_profile", f"maxCellChars is outside 1..{MAX_CELL_CHARS}")
+    return CleanupProfile(
+        columns=tuple(columns),
+        key_columns=tuple(raw_keys),
+        blank_values=frozenset(item.strip() for item in raw_blanks) | {""},
+        max_rows=max_rows,
+        max_cell_chars=max_cell_chars,
+    )
+
+
+def validate_table_cleanup_profile(value: Mapping[str, object]) -> None:
+    """Validate a cleanup profile without reading or mutating user data."""
+    _cleanup_profile(value)
+
+
+def _normalize_number(value: str) -> str:
+    compact = re.sub(r"[\s,]", "", value)
+    match = re.fullmatch(r"([+-]?)(\d+)(?:\.(\d+))?", compact)
+    if not match:
+        return ""
+    integer = match.group(2).lstrip("0") or "0"
+    fraction = (match.group(3) or "").rstrip("0")
+    sign = "-" if match.group(1) == "-" and (integer != "0" or fraction) else ""
+    return sign + integer + (f".{fraction}" if fraction else "")
+
+
+def _cleanup_rows(data: bytes, profile: CleanupProfile, kind: str) -> list[dict[str, object]]:
+    table = _csv_table(data, kind)
+    headers = tuple(_text(item) for item in (table[0] if table else ()))
+    if not headers or len(headers) != len(set(headers)) or any(not item for item in headers):
+        raise IntakeError("invalid_header_mapping", f"{kind} CSV has duplicate or blank headers")
+    missing = {column.source for column in profile.columns} - set(headers)
+    if missing:
+        raise IntakeError("invalid_header_mapping", f"{kind} CSV is missing configured columns")
+    indexes = {header: index for index, header in enumerate(headers)}
+    rows: list[dict[str, object]] = []
+    for raw in table[1:]:
+        if not raw or not any(_text(cell) for cell in raw):
+            continue
+        if len(raw) != len(headers):
+            raise IntakeError("row_width_mismatch", f"{kind} CSV row width differs from its header")
+        if len(rows) >= profile.max_rows:
+            raise IntakeError("limit_exceeded", f"{kind} CSV exceeds maxRows")
+        if any(len(cell) > profile.max_cell_chars for cell in raw):
+            raise IntakeError("limit_exceeded", f"{kind} CSV contains an oversized cell")
+        values: dict[str, str] = {}
+        reasons: list[str] = []
+        invalid_outputs: set[str] = set()
+        for column in profile.columns:
+            original = _text(raw[indexes[column.source]])
+            cleaned = "" if original in profile.blank_values else original
+            normalized = cleaned
+            invalid = False
+            if cleaned and column.transform == "date_ymd":
+                normalized = normalize_date(cleaned)
+                invalid = not normalized
+            elif cleaned and column.transform == "number":
+                normalized = _normalize_number(cleaned)
+                invalid = not normalized
+            elif cleaned and column.transform == "phone_kr":
+                normalized = normalize_phone(cleaned)
+                invalid = not normalized
+            elif cleaned and column.transform == "enum":
+                normalized = column.enum_map.get(cleaned, "")
+                invalid = not normalized
+            if invalid:
+                normalized = cleaned
+                invalid_outputs.add(column.output)
+                reasons.append(f"invalid:{column.output}")
+            if column.required and not normalized:
+                reasons.append(f"missing:{column.output}")
+                invalid_outputs.add(column.output)
+            values[column.output] = normalized
+        rows.append({"values": values, "reasons": reasons, "invalid_outputs": invalid_outputs})
+
+    groups: dict[tuple[str, ...], list[dict[str, object]]] = {}
+    for row in rows:
+        values = row["values"]
+        invalid_outputs = row["invalid_outputs"]
+        assert isinstance(values, dict) and isinstance(invalid_outputs, set)
+        key = tuple(str(values.get(column, "")) for column in profile.key_columns)
+        if profile.key_columns and all(key) and not (set(profile.key_columns) & invalid_outputs):
+            groups.setdefault(key, []).append(row)
+    for matches in groups.values():
+        if len(matches) > 1:
+            for row in matches:
+                reasons = row["reasons"]
+                assert isinstance(reasons, list)
+                reasons.append("duplicate:key")
+    for row in rows:
+        reasons = row["reasons"]
+        assert isinstance(reasons, list)
+        row["status"] = "duplicate_candidate" if "duplicate:key" in reasons else "review" if reasons else "ready"
+    return rows
+
+
+def _cleanup_export_rows(rows: Sequence[Mapping[str, object]]) -> list[dict[str, str]]:
+    exported: list[dict[str, str]] = []
+    for row in rows:
+        values = dict(row["values"])
+        reasons = row["reasons"]
+        assert isinstance(reasons, list)
+        values["_atelier_status"] = str(row["status"])
+        values["_atelier_review"] = "|".join(dict.fromkeys(str(item) for item in reasons))
+        exported.append({key: str(value) for key, value in values.items()})
+    return exported
+
+
+def _cleanup_csv(fields: Sequence[str], rows: Sequence[Mapping[str, str]], numeric_fields: set[str]) -> bytes:
+    for row in rows:
+        for field in fields:
+            value = str(row.get(field, ""))
+            if re.match(r"^[\x00-\x20]*[=+@-]", value) and not (
+                field in numeric_fields and bool(re.fullmatch(r"-?\d+(?:\.\d+)?", value))
+            ):
+                raise IntakeError("unsafe_spreadsheet_cell", f"unsafe spreadsheet value in {field}")
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=fields, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue().encode("utf-8")
+
+
+def _comparison_rows(
+    current: Sequence[Mapping[str, object]], previous: Sequence[Mapping[str, object]], profile: CleanupProfile,
+) -> tuple[list[dict[str, str]], dict[str, int]]:
+    summary = {name: 0 for name in ("added", "changed", "missing", "same", "duplicate", "review")}
+    if not previous:
+        return [], summary
+
+    def key(row: Mapping[str, object]) -> tuple[str, ...]:
+        values = row["values"]
+        assert isinstance(values, dict)
+        return tuple(str(values.get(column, "")) for column in profile.key_columns)
+
+    current_groups: dict[tuple[str, ...], list[Mapping[str, object]]] = {}
+    previous_groups: dict[tuple[str, ...], list[Mapping[str, object]]] = {}
+    for row in current:
+        current_groups.setdefault(key(row), []).append(row)
+    for row in previous:
+        previous_groups.setdefault(key(row), []).append(row)
+    output: list[dict[str, str]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def append(change: str, row: Mapping[str, object], changed: Sequence[str] = ()) -> None:
+        values = _cleanup_export_rows([row])[0]
+        output.append({"_atelier_change": change, "_atelier_changed_columns": "|".join(changed), **values})
+        summary[change] += 1
+
+    for row in current:
+        row_key = key(row)
+        if not profile.key_columns or not all(row_key):
+            append("review", row, profile.key_columns)
+            continue
+        if len(current_groups[row_key]) > 1 or len(previous_groups.get(row_key, ())) > 1:
+            append("duplicate", row)
+            seen.add(row_key)
+            continue
+        old = previous_groups.get(row_key)
+        if not old:
+            append("added", row)
+        else:
+            current_values, previous_values = row["values"], old[0]["values"]
+            assert isinstance(current_values, dict) and isinstance(previous_values, dict)
+            changed = [column.output for column in profile.columns
+                       if current_values.get(column.output) != previous_values.get(column.output)]
+            append("changed" if changed else "same", row, changed)
+        seen.add(row_key)
+    for row in previous:
+        row_key = key(row)
+        if not profile.key_columns or not all(row_key) or row_key in seen:
+            continue
+        append("duplicate" if len(previous_groups[row_key]) > 1 else "missing", row)
+        seen.add(row_key)
+    return output, summary
+
+
+def run_table_cleanup(
+    source_csv: bytes,
+    profile_value: Mapping[str, object],
+    previous_csv: bytes | None = None,
+) -> TableCleanupOutput:
+    profile = _cleanup_profile(profile_value)
+    current = _cleanup_rows(source_csv, profile, "source")
+    previous = _cleanup_rows(previous_csv, profile, "previous") if previous_csv is not None else []
+    fields = [column.output for column in profile.columns] + ["_atelier_status", "_atelier_review"]
+    numeric_fields = {column.output for column in profile.columns if column.transform == "number"}
+    cleaned_rows = _cleanup_export_rows(current)
+    review_rows = [row for row in cleaned_rows if row["_atelier_status"] != "ready"]
+    comparison_rows, comparison_summary = _comparison_rows(current, previous, profile)
+    cleaned_csv = _cleanup_csv(fields, cleaned_rows, numeric_fields)
+    review_csv = _cleanup_csv(fields, review_rows, numeric_fields)
+    comparison_fields = ["_atelier_change", "_atelier_changed_columns", *fields]
+    comparison_csv = _cleanup_csv(comparison_fields, comparison_rows, numeric_fields)
+    summary = {
+        "processed": len(cleaned_rows),
+        "normal": sum(row["_atelier_status"] == "ready" for row in cleaned_rows),
+        "review": sum(row["_atelier_status"] == "review" for row in cleaned_rows),
+        "duplicate_candidate": sum(row["_atelier_status"] == "duplicate_candidate" for row in cleaned_rows),
+        **{f"comparison_{key}": value for key, value in comparison_summary.items()},
+    }
+    source_hash = _sha256(source_csv)
+    previous_hash = _sha256(previous_csv) if previous_csv is not None else None
+    profile_hash = _sha256(_canonical_json(profile_value))
+    operation_id = "tc_" + _sha256(_canonical_json({
+        "sourceSha256": source_hash, "previousSha256": previous_hash, "profileSha256": profile_hash,
+    }))[:24]
+    manifest = {
+        "schemaVersion": TABLE_CLEANUP_MANIFEST_SCHEMA,
+        "coreVersion": CORE_VERSION,
+        "operationId": operation_id,
+        "sourceSha256": source_hash,
+        "previousSha256": previous_hash,
+        "profileSha256": profile_hash,
+        "cleanedSha256": _sha256(cleaned_csv),
+        "reviewSha256": _sha256(review_csv),
+        "comparisonSha256": _sha256(comparison_csv),
+        "summary": summary,
+    }
+    return TableCleanupOutput(
+        cleaned_csv=cleaned_csv,
+        review_csv=review_csv,
+        comparison_csv=comparison_csv,
+        manifest_json=_canonical_json(manifest) + b"\n",
+        summary=summary,
+    )

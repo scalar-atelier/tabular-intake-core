@@ -6,6 +6,7 @@ import json
 import hashlib
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from scalar_tabular_intake import (
@@ -18,6 +19,8 @@ from scalar_tabular_intake import (
     normalize_phone,
     run_intake,
     run_csv_intake,
+    run_table_cleanup,
+    validate_table_cleanup_profile,
 )
 from scalar_tabular_intake.__main__ import main as cli_main
 
@@ -34,6 +37,110 @@ class IntakeCoreTest(unittest.TestCase):
         self.source = (SAMPLE / "source.csv").read_bytes()
         self.history = (SAMPLE / "history.csv").read_bytes()
         self.rules = json.loads((SAMPLE / "rules.json").read_text(encoding="utf-8"))
+
+    @staticmethod
+    def cleanup_profile() -> dict:
+        return {
+            "schemaVersion": "scalar-table-cleanup-profile/v1",
+            "columns": [
+                {"source": "order_id", "output": "주문번호", "transform": "text", "required": True},
+                {"source": "customer", "output": "고객명", "transform": "text", "required": True},
+                {"source": "phone", "output": "연락처", "transform": "phone_kr", "required": True},
+                {"source": "order_date", "output": "주문일", "transform": "date_ymd", "required": True},
+                {"source": "status", "output": "상태", "transform": "enum", "required": True,
+                 "enumMap": {"done": "완료", "shipping": "배송중", "cancelled": "취소"}},
+                {"source": "amount", "output": "금액", "transform": "number", "required": False},
+            ],
+            "keyColumns": ["주문번호"],
+            "blankValues": ["", "-", "N/A"],
+            "maxRows": 100,
+            "maxCellChars": 1_000,
+        }
+
+    @staticmethod
+    def cleanup_source() -> bytes:
+        return (
+            "order_id,customer,phone,order_date,status,amount,note\n"
+            "1001, 김철수 ,010-1234-5678,2024-7-1,done,\"120,000\",ignored\n"
+            "1002,이영희,01012345679,2024/07/02,shipping,85000,ignored\n"
+            "1003,박민수,010-1234-5678,2024.07.02,done,95000,ignored\n"
+            "1003,박민수,010-1234-5678,2024.07.02,done,95000,ignored\n"
+            "1004,최지우,bad,2024-07-03,cancelled,-50000,ignored\n"
+        ).encode()
+
+    @staticmethod
+    def cleanup_previous() -> bytes:
+        return (
+            "order_id,customer,phone,order_date,status,amount,note\n"
+            "1001,김철수,01012345678,2024-07-01,done,100000,ignored\n"
+            "1002,이영희,01012345679,2024-07-02,shipping,85000,ignored\n"
+            "1005,정하나,010-5555-6666,2024-07-03,done,200000,ignored\n"
+        ).encode()
+
+    def test_generic_cleanup_is_deterministic_review_only_and_comparable(self) -> None:
+        profile = self.cleanup_profile()
+        source = self.cleanup_source()
+        previous = self.cleanup_previous()
+        before = hashlib.sha256(source).hexdigest()
+        first = run_table_cleanup(source, profile, previous)
+        second = run_table_cleanup(source, profile, previous)
+
+        self.assertEqual(hashlib.sha256(source).hexdigest(), before)
+        self.assertEqual(first, second)
+        self.assertEqual(first.summary, {
+            "processed": 5,
+            "normal": 2,
+            "review": 1,
+            "duplicate_candidate": 2,
+            "comparison_added": 1,
+            "comparison_changed": 1,
+            "comparison_missing": 1,
+            "comparison_same": 1,
+            "comparison_duplicate": 2,
+            "comparison_review": 0,
+        })
+        cleaned = rows(first.cleaned_csv)
+        self.assertEqual(len(cleaned), 5)
+        self.assertEqual(cleaned[0]["고객명"], "김철수")
+        self.assertEqual(cleaned[0]["주문일"], "2024-07-01")
+        self.assertEqual(cleaned[0]["금액"], "120000")
+        self.assertEqual(cleaned[2]["_atelier_status"], "duplicate_candidate")
+        self.assertEqual(cleaned[3]["_atelier_status"], "duplicate_candidate")
+        self.assertEqual(cleaned[4]["연락처"], "bad")
+        self.assertEqual(cleaned[4]["금액"], "-50000")
+        self.assertIn("invalid:연락처", cleaned[4]["_atelier_review"])
+        self.assertNotIn("note", cleaned[0])
+        manifest = json.loads(first.manifest_json)
+        self.assertEqual(manifest["schemaVersion"], "scalar-table-cleanup-run/v1")
+        self.assertRegex(manifest["operationId"], r"^tc_[0-9a-f]{24}$")
+        comparison = rows(first.comparison_csv)
+        self.assertEqual([row["_atelier_change"] for row in comparison],
+                         ["changed", "same", "duplicate", "duplicate", "added", "missing"])
+
+    def test_generic_cleanup_is_thread_safe_and_rejects_unsafe_or_drifted_inputs(self) -> None:
+        profile = self.cleanup_profile()
+        source = self.cleanup_source()
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda _index: run_table_cleanup(source, profile), range(8)))
+        self.assertEqual({result.manifest_json for result in results}, {results[0].manifest_json})
+
+        with self.assertRaises(IntakeError) as drift:
+            run_table_cleanup(source.replace(b"order_id,", b"changed_id,"), profile)
+        self.assertEqual(drift.exception.code, "invalid_header_mapping")
+        with self.assertRaises(IntakeError) as unknown:
+            run_table_cleanup(source, {**profile, "future": True})
+        self.assertEqual(unknown.exception.code, "invalid_profile")
+        validate_table_cleanup_profile(profile)
+        with self.assertRaises(IntakeError):
+            validate_table_cleanup_profile({**profile, "future": True})
+        unsafe = source.replace(b"ignored\n", b"=HYPERLINK(1)\n", 1)
+        unsafe_profile = {**profile, "columns": [
+            *profile["columns"],
+            {"source": "note", "output": "메모", "transform": "text", "required": False},
+        ]}
+        with self.assertRaises(IntakeError) as formula:
+            run_table_cleanup(unsafe, unsafe_profile)
+        self.assertEqual(formula.exception.code, "unsafe_spreadsheet_cell")
 
     def test_cfriends_parity_rules_on_synthetic_data(self) -> None:
         self.assertEqual(normalize_phone("010-1234-5678"), "01012345678")
@@ -119,7 +226,7 @@ class IntakeCoreTest(unittest.TestCase):
         result = run_intake(source, self.rules)
         self.assertEqual(result.summary["processed"], 1)
         self.assertEqual(json.loads(result.manifest_json)["coreVersion"], "0.1.0")
-        self.assertEqual((PACKAGE_VERSION, CORE_VERSION), ("0.2.2", "0.1.0"))
+        self.assertEqual((PACKAGE_VERSION, CORE_VERSION), ("0.3.0", "0.1.0"))
 
     def test_trust_boundary_error_codes_and_input_immutability(self) -> None:
         original = b"name,phone,date,item\nExample,010-1234-5678,1990-02-03,open\n"

@@ -1,7 +1,7 @@
 {
   "name": "@scalar-atelier/tabular-intake-core",
-  "version": "0.2.2",
-  "description": "Deterministic CSV intake normalization for Node.js and browsers.",
+  "version": "0.3.0",
+  "description": "Deterministic CSV cleanup, comparison, and review classification for Python, Node.js, and browsers.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -17,13 +17,16 @@
     ".": {
       "types": "./dist-js/core.d.ts",
       "import": "./dist-js/core.js"
-    }
+    },
+    "./schema/table-cleanup-profile.v1.schema.json": "./schema/table-cleanup-profile.v1.schema.json",
+    "./schema/table-cleanup-run-manifest.v1.schema.json": "./schema/table-cleanup-run-manifest.v1.schema.json"
   },
   "bin": {
     "scalar-tabular-intake": "./dist-js/cli.js"
   },
   "files": [
     "dist-js",
+    "schema",
     "sample-pack",
     "contract-vectors",
     "README.md",

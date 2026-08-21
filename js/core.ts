@@ -1,9 +1,11 @@
 import { parse } from "csv-parse/browser/esm/sync";
 
-export const PACKAGE_VERSION = "0.2.2";
+export const PACKAGE_VERSION = "0.3.0";
 export const CORE_VERSION = "0.1.0";
 export const RULE_SCHEMA = "scalar-tabular-intake-rules/v1";
 export const MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1";
+export const TABLE_CLEANUP_PROFILE_SCHEMA = "scalar-table-cleanup-profile/v1";
+export const TABLE_CLEANUP_MANIFEST_SCHEMA = "scalar-table-cleanup-run/v1";
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024;
 export const MAX_ROWS = 100_000;
 export const MAX_COLUMNS = 256;
@@ -71,6 +73,33 @@ export interface RunIntakeInput {
   source: Uint8Array;
   history?: Uint8Array;
   rules: RuleValue;
+}
+
+export interface CleanupColumnValue {
+  source: string;
+  output: string;
+  transform: "text" | "date_ymd" | "number" | "phone_kr" | "enum";
+  required?: boolean;
+  enumMap?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+export interface TableCleanupProfileV1 {
+  schemaVersion: string;
+  columns: CleanupColumnValue[];
+  keyColumns?: string[];
+  blankValues?: string[];
+  maxRows?: number;
+  maxCellChars?: number;
+  [key: string]: unknown;
+}
+
+export interface TableCleanupOutput {
+  cleanedCsv: Uint8Array;
+  reviewCsv: Uint8Array;
+  comparisonCsv: Uint8Array;
+  manifestJson: Uint8Array;
+  summary: Record<string, number>;
 }
 
 const encoder = new TextEncoder();
@@ -448,4 +477,303 @@ export async function runCsvIntake(sourceCsv: Uint8Array, historyCsv: Uint8Array
 
 export async function runIntake(input: RunIntakeInput): Promise<IntakeOutput> {
   return runCsvIntake(input.source, input.history ?? EMPTY_HISTORY_CSV, input.rules);
+}
+
+const CLEANUP_PROFILE_KEYS = new Set([
+  "schemaVersion", "columns", "keyColumns", "blankValues", "maxRows", "maxCellChars",
+]);
+const CLEANUP_COLUMN_KEYS = new Set(["source", "output", "transform", "required", "enumMap"]);
+const CLEANUP_TRANSFORMS = new Set(["text", "date_ymd", "number", "phone_kr", "enum"]);
+const CLEANUP_RESERVED = new Set([
+  "_atelier_status", "_atelier_review", "_atelier_change", "_atelier_changed_columns",
+]);
+
+interface CleanupColumn {
+  source: string;
+  output: string;
+  transform: string;
+  required: boolean;
+  enumMap: Record<string, string>;
+}
+
+interface CleanupProfile {
+  columns: CleanupColumn[];
+  keyColumns: string[];
+  blankValues: Set<string>;
+  maxRows: number;
+  maxCellChars: number;
+}
+
+interface CleanupRow {
+  values: Record<string, string>;
+  reasons: string[];
+  invalidOutputs: Set<string>;
+  status: "ready" | "review" | "duplicate_candidate";
+}
+
+function cleanupProfile(value: TableCleanupProfileV1): CleanupProfile {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new IntakeError("invalid_profile", "profile must be an object");
+  }
+  const unknown = Object.keys(value).filter(key => !CLEANUP_PROFILE_KEYS.has(key));
+  if (unknown.length) throw new IntakeError("invalid_profile", `unknown profile fields: ${unknown.sort().join(", ")}`);
+  if (Object.values(value).some(item => item === undefined)) throw new IntakeError("invalid_profile", "profile cannot contain undefined values");
+  if (value.schemaVersion !== TABLE_CLEANUP_PROFILE_SCHEMA) throw new IntakeError("invalid_profile", "unsupported profile schema");
+  if (!Array.isArray(value.columns) || value.columns.length < 1 || value.columns.length > MAX_COLUMNS) {
+    throw new IntakeError("invalid_profile", `columns must contain 1..${MAX_COLUMNS} items`);
+  }
+  const columns: CleanupColumn[] = [];
+  const seenSources = new Set<string>();
+  const seenOutputs = new Set<string>();
+  for (const raw of value.columns) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)
+        || Object.keys(raw).some(key => !CLEANUP_COLUMN_KEYS.has(key))
+        || Object.values(raw).some(item => item === undefined)) {
+      throw new IntakeError("invalid_profile", "column rules contain unknown or undefined fields");
+    }
+    const source = text(raw.source);
+    const output = text(raw.output);
+    const transform = text(raw.transform);
+    const required = raw.required ?? false;
+    if (!source || !output || charLength(source) > 200 || charLength(output) > 200 || /[\u0000\r\n]/.test(source + output)) {
+      throw new IntakeError("invalid_profile", "column source and output must be short single-line strings");
+    }
+    if (/^[\x00-\x20]*[=+@-]/.test(output) || CLEANUP_RESERVED.has(output)) {
+      throw new IntakeError("invalid_profile", "column output uses a reserved or unsafe name");
+    }
+    if (seenSources.has(source) || seenOutputs.has(output)) {
+      throw new IntakeError("invalid_profile", "column source and output names must be unique");
+    }
+    if (!CLEANUP_TRANSFORMS.has(transform) || typeof required !== "boolean") {
+      throw new IntakeError("invalid_profile", "column transform or required flag is invalid");
+    }
+    const rawEnum = raw.enumMap ?? {};
+    if (!rawEnum || typeof rawEnum !== "object" || Array.isArray(rawEnum) || Object.keys(rawEnum).length > 100) {
+      throw new IntakeError("invalid_profile", "enumMap must be a small object");
+    }
+    const enumMap: Record<string, string> = {};
+    for (const [enumSourceRaw, enumOutputRaw] of Object.entries(rawEnum)) {
+      if (typeof enumOutputRaw !== "string") throw new IntakeError("invalid_profile", "enumMap values must be strings");
+      const enumSource = enumSourceRaw.trim();
+      const enumOutput = enumOutputRaw.trim();
+      if (!enumSource || !enumOutput || charLength(enumSource) > 200 || charLength(enumOutput) > 200) {
+        throw new IntakeError("invalid_profile", "enumMap contains a blank or oversized item");
+      }
+      enumMap[enumSource] = enumOutput;
+    }
+    if ((transform === "enum") !== Boolean(Object.keys(enumMap).length)) {
+      throw new IntakeError("invalid_profile", "enum transform requires enumMap and other transforms forbid it");
+    }
+    columns.push({ source, output, transform, required, enumMap });
+    seenSources.add(source);
+    seenOutputs.add(output);
+  }
+  const keyColumns = value.keyColumns ?? [];
+  if (!Array.isArray(keyColumns) || keyColumns.length > columns.length
+      || keyColumns.some(item => typeof item !== "string" || !seenOutputs.has(item))
+      || new Set(keyColumns).size !== keyColumns.length) {
+    throw new IntakeError("invalid_profile", "keyColumns must contain unique output column names");
+  }
+  const blankValues = value.blankValues ?? ["", "-", "N/A", "n/a"];
+  if (!Array.isArray(blankValues) || blankValues.length > 100
+      || blankValues.some(item => typeof item !== "string" || charLength(item) > 200)) {
+    throw new IntakeError("invalid_profile", "blankValues must contain short strings");
+  }
+  const maxRows = value.maxRows ?? 50_000;
+  const maxCellChars = value.maxCellChars ?? 10_000;
+  if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > MAX_ROWS) {
+    throw new IntakeError("invalid_profile", `maxRows is outside 1..${MAX_ROWS}`);
+  }
+  if (!Number.isInteger(maxCellChars) || maxCellChars < 1 || maxCellChars > MAX_CELL_CHARS) {
+    throw new IntakeError("invalid_profile", `maxCellChars is outside 1..${MAX_CELL_CHARS}`);
+  }
+  return {
+    columns, keyColumns: [...keyColumns], blankValues: new Set(["", ...blankValues.map(item => item.trim())]),
+    maxRows, maxCellChars,
+  };
+}
+
+function normalizeNumber(value: string): string {
+  const compact = value.replace(/[\s,]/g, "");
+  const match = compact.match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
+  if (!match) return "";
+  const integer = (match[2] ?? "").replace(/^0+(?=\d)/, "") || "0";
+  const fraction = (match[3] ?? "").replace(/0+$/, "");
+  const sign = match[1] === "-" && (integer !== "0" || fraction) ? "-" : "";
+  return `${sign}${integer}${fraction ? `.${fraction}` : ""}`;
+}
+
+function cleanupRows(data: Uint8Array, profile: CleanupProfile, kind: string): CleanupRow[] {
+  const table = csvTable(data, kind);
+  const headers = (table[0] ?? []).map(text);
+  if (!headers.length || new Set(headers).size !== headers.length || headers.some(header => !header)) {
+    throw new IntakeError("invalid_header_mapping", `${kind} CSV has duplicate or blank headers`);
+  }
+  if (profile.columns.some(column => !headers.includes(column.source))) {
+    throw new IntakeError("invalid_header_mapping", `${kind} CSV is missing configured columns`);
+  }
+  const indexes = new Map(headers.map((header, index) => [header, index]));
+  const rows: CleanupRow[] = [];
+  for (const raw of table.slice(1)) {
+    if (!raw.length || !raw.some(cell => text(cell))) continue;
+    if (raw.length !== headers.length) throw new IntakeError("row_width_mismatch", `${kind} CSV row width differs from its header`);
+    if (rows.length >= profile.maxRows) throw new IntakeError("limit_exceeded", `${kind} CSV exceeds maxRows`);
+    if (raw.some(cell => charLength(cell) > profile.maxCellChars)) {
+      throw new IntakeError("limit_exceeded", `${kind} CSV contains an oversized cell`);
+    }
+    const values: Record<string, string> = {};
+    const reasons: string[] = [];
+    const invalidOutputs = new Set<string>();
+    for (const column of profile.columns) {
+      const original = text(raw[indexes.get(column.source) ?? -1]);
+      const cleaned = profile.blankValues.has(original) ? "" : original;
+      let normalized = cleaned;
+      let invalid = false;
+      if (cleaned && column.transform === "date_ymd") {
+        normalized = normalizeDate(cleaned); invalid = !normalized;
+      } else if (cleaned && column.transform === "number") {
+        normalized = normalizeNumber(cleaned); invalid = !normalized;
+      } else if (cleaned && column.transform === "phone_kr") {
+        normalized = normalizePhone(cleaned); invalid = !normalized;
+      } else if (cleaned && column.transform === "enum") {
+        normalized = column.enumMap[cleaned] ?? ""; invalid = !normalized;
+      }
+      if (invalid) {
+        normalized = cleaned;
+        invalidOutputs.add(column.output);
+        reasons.push(`invalid:${column.output}`);
+      }
+      if (column.required && !normalized) {
+        invalidOutputs.add(column.output);
+        reasons.push(`missing:${column.output}`);
+      }
+      values[column.output] = normalized;
+    }
+    rows.push({ values, reasons, invalidOutputs, status: reasons.length ? "review" : "ready" });
+  }
+  const groups = new Map<string, CleanupRow[]>();
+  for (const row of rows) {
+    const parts = profile.keyColumns.map(column => row.values[column] ?? "");
+    if (profile.keyColumns.length && parts.every(Boolean)
+        && !profile.keyColumns.some(column => row.invalidOutputs.has(column))) {
+      const key = canonicalJson(parts);
+      groups.set(key, [...(groups.get(key) ?? []), row]);
+    }
+  }
+  for (const matches of groups.values()) {
+    if (matches.length > 1) matches.forEach(row => { row.reasons.push("duplicate:key"); row.status = "duplicate_candidate"; });
+  }
+  return rows;
+}
+
+function cleanupExportRows(rows: CleanupRow[]): Record<string, string>[] {
+  return rows.map(row => ({
+    ...row.values,
+    _atelier_status: row.status,
+    _atelier_review: [...new Set(row.reasons)].join("|"),
+  }));
+}
+
+function cleanupWriteCsv(fields: string[], rows: Record<string, string>[], numericFields: Set<string>): Uint8Array {
+  for (const row of rows) {
+    for (const field of fields) {
+      const value = String(row[field] ?? "");
+      if (/^[\x00-\x20]*[=+@-]/.test(value)
+          && !(numericFields.has(field) && /^-?\d+(?:\.\d+)?$/.test(value))) {
+        throw new IntakeError("unsafe_spreadsheet_cell", `unsafe spreadsheet value in ${field}`);
+      }
+    }
+  }
+  const lines = [fields.join(","), ...rows.map(row => fields.map(field => csvCell(row[field])).join(","))];
+  return encode(`${lines.join("\n")}\n`);
+}
+
+function comparisonRows(current: CleanupRow[], previous: CleanupRow[], profile: CleanupProfile): {
+  rows: Record<string, string>[]; summary: Record<string, number>;
+} {
+  const summary = Object.fromEntries(["added", "changed", "missing", "same", "duplicate", "review"].map(name => [name, 0]));
+  if (!previous.length) return { rows: [], summary };
+  const keyParts = (row: CleanupRow): string[] => profile.keyColumns.map(column => row.values[column] ?? "");
+  const key = (row: CleanupRow): string => canonicalJson(keyParts(row));
+  const currentGroups = new Map<string, CleanupRow[]>();
+  const previousGroups = new Map<string, CleanupRow[]>();
+  current.forEach(row => currentGroups.set(key(row), [...(currentGroups.get(key(row)) ?? []), row]));
+  previous.forEach(row => previousGroups.set(key(row), [...(previousGroups.get(key(row)) ?? []), row]));
+  const rows: Record<string, string>[] = [];
+  const seen = new Set<string>();
+  const append = (change: string, row: CleanupRow, changed: string[] = []): void => {
+    rows.push({ _atelier_change: change, _atelier_changed_columns: changed.join("|"), ...cleanupExportRows([row])[0] });
+    summary[change] = (summary[change] ?? 0) + 1;
+  };
+  for (const row of current) {
+    const parts = keyParts(row);
+    const rowKey = key(row);
+    if (!profile.keyColumns.length || !parts.every(Boolean)) {
+      append("review", row, profile.keyColumns);
+      continue;
+    }
+    if ((currentGroups.get(rowKey)?.length ?? 0) > 1 || (previousGroups.get(rowKey)?.length ?? 0) > 1) {
+      append("duplicate", row); seen.add(rowKey); continue;
+    }
+    const old = previousGroups.get(rowKey)?.[0];
+    if (!old) append("added", row);
+    else {
+      const changed = profile.columns.filter(column => row.values[column.output] !== old.values[column.output]).map(column => column.output);
+      append(changed.length ? "changed" : "same", row, changed);
+    }
+    seen.add(rowKey);
+  }
+  for (const row of previous) {
+    const parts = keyParts(row);
+    const rowKey = key(row);
+    if (!profile.keyColumns.length || !parts.every(Boolean) || seen.has(rowKey)) continue;
+    append((previousGroups.get(rowKey)?.length ?? 0) > 1 ? "duplicate" : "missing", row);
+    seen.add(rowKey);
+  }
+  return { rows, summary };
+}
+
+export async function runTableCleanup(input: {
+  source: Uint8Array;
+  profile: TableCleanupProfileV1;
+  previous?: Uint8Array;
+}): Promise<TableCleanupOutput> {
+  const profile = cleanupProfile(input.profile);
+  const current = cleanupRows(input.source, profile, "source");
+  const previous = input.previous ? cleanupRows(input.previous, profile, "previous") : [];
+  const fields = [...profile.columns.map(column => column.output), "_atelier_status", "_atelier_review"];
+  const numericFields = new Set(profile.columns.filter(column => column.transform === "number").map(column => column.output));
+  const cleanedRows = cleanupExportRows(current);
+  const reviewRows = cleanedRows.filter(row => row._atelier_status !== "ready");
+  const comparison = comparisonRows(current, previous, profile);
+  const cleanedCsv = cleanupWriteCsv(fields, cleanedRows, numericFields);
+  const reviewCsv = cleanupWriteCsv(fields, reviewRows, numericFields);
+  const comparisonCsv = cleanupWriteCsv(["_atelier_change", "_atelier_changed_columns", ...fields], comparison.rows, numericFields);
+  const summary = {
+    processed: cleanedRows.length,
+    normal: cleanedRows.filter(row => row._atelier_status === "ready").length,
+    review: cleanedRows.filter(row => row._atelier_status === "review").length,
+    duplicate_candidate: cleanedRows.filter(row => row._atelier_status === "duplicate_candidate").length,
+    ...Object.fromEntries(Object.entries(comparison.summary).map(([name, count]) => [`comparison_${name}`, count])),
+  };
+  const sourceSha256 = await sha256(input.source);
+  const previousSha256 = input.previous ? await sha256(input.previous) : null;
+  const profileSha256 = await sha256(encode(canonicalJson(input.profile)));
+  const operationId = `tc_${(await sha256(encode(canonicalJson({ sourceSha256, previousSha256, profileSha256 })))).slice(0, 24)}`;
+  const manifest = {
+    schemaVersion: TABLE_CLEANUP_MANIFEST_SCHEMA,
+    coreVersion: CORE_VERSION,
+    operationId,
+    sourceSha256,
+    previousSha256,
+    profileSha256,
+    cleanedSha256: await sha256(cleanedCsv),
+    reviewSha256: await sha256(reviewCsv),
+    comparisonSha256: await sha256(comparisonCsv),
+    summary,
+  };
+  return {
+    cleanedCsv, reviewCsv, comparisonCsv,
+    manifestJson: encode(`${canonicalJson(manifest)}\n`), summary,
+  };
 }

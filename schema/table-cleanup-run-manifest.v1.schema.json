@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scalar-inc.com/contracts/table-cleanup-run-manifest.v1.schema.json",
+  "title": "TableCleanupRunManifestV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "coreVersion", "operationId", "sourceSha256", "previousSha256",
+    "profileSha256", "cleanedSha256", "reviewSha256", "comparisonSha256", "summary"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "scalar-table-cleanup-run/v1" },
+    "coreVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "operationId": { "type": "string", "pattern": "^tc_[0-9a-f]{24}$" },
+    "sourceSha256": { "$ref": "#/$defs/hash" },
+    "previousSha256": { "oneOf": [{ "$ref": "#/$defs/hash" }, { "type": "null" }] },
+    "profileSha256": { "$ref": "#/$defs/hash" },
+    "cleanedSha256": { "$ref": "#/$defs/hash" },
+    "reviewSha256": { "$ref": "#/$defs/hash" },
+    "comparisonSha256": { "$ref": "#/$defs/hash" },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "processed", "normal", "review", "duplicate_candidate", "comparison_added",
+        "comparison_changed", "comparison_missing", "comparison_same", "comparison_duplicate",
+        "comparison_review"
+      ],
+      "properties": {
+        "processed": { "$ref": "#/$defs/count" },
+        "normal": { "$ref": "#/$defs/count" },
+        "review": { "$ref": "#/$defs/count" },
+        "duplicate_candidate": { "$ref": "#/$defs/count" },
+        "comparison_added": { "$ref": "#/$defs/count" },
+        "comparison_changed": { "$ref": "#/$defs/count" },
+        "comparison_missing": { "$ref": "#/$defs/count" },
+        "comparison_same": { "$ref": "#/$defs/count" },
+        "comparison_duplicate": { "$ref": "#/$defs/count" },
+        "comparison_review": { "$ref": "#/$defs/count" }
+      }
+    }
+  },
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "count": { "type": "integer", "minimum": 0 }
+  }
+}
