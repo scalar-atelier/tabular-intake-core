@@ -115,6 +115,44 @@ test("Node CLI produces the three public artifacts without history", async () =>
   assert.ok(artifacts.every(value => value.byteLength > 0));
 });
 
+test("demo-only Korean fixture explains every consumer outcome without changing the golden pack", async () => {
+  const [sourceRaw, historyRaw] = await Promise.all([
+    readFile(resolve(root, "demo/fixtures/roster-ko.csv")),
+    readFile(resolve(root, "demo/fixtures/history-ko.csv")),
+  ]);
+  const source = canonicalizeCsv(sourceRaw, {
+    kind: "source",
+    generatedId: "row_number",
+    preNormalizers: { date: "kr_resident_or_date" },
+    headerMap: { 신청일시: "submitted_at", 이름: "name", 전화번호: "phone", 생년월일: "date", 희망프로그램: "item" },
+  });
+  const history = canonicalizeCsv(historyRaw, {
+    kind: "history",
+    generatedId: "row_number",
+    preNormalizers: { date: "kr_resident_or_date" },
+    headerMap: { 처리상태: "disposition", 기수: "period", 이름: "name", 생년월일: "date", 전화번호: "phone" },
+  });
+  const result = await runIntake({
+    source,
+    history,
+    rules: {
+      schemaVersion: "scalar-tabular-intake-rules/v1",
+      requiredFields: ["name", "phone", "date", "item"],
+      closedItemValues: ["마감"],
+      historyBlockValues: ["차단"],
+      phoneProfile: "kr_mobile",
+    },
+  });
+  assert.deepEqual(result.summary, {
+    processed: 8,
+    normal: 3,
+    information_review: 1,
+    duplicate_candidate: 2,
+    blocked_candidate: 1,
+    closed: 1,
+  });
+});
+
 test("static demo is networkless and its build receipt matches its bytes", async () => {
   const destination = resolve(root, "demo-dist");
   const [html, source, manifest] = await Promise.all([
@@ -125,6 +163,10 @@ test("static demo is networkless and its build receipt matches its bytes", async
   assert.match(html, /connect-src 'none'/);
   assert.match(html, /id="source-file"/);
   assert.match(html, /aria-live="polite"/);
+  assert.equal((html.match(/class="panel[^"\n]*demo-step"/g) || []).length, 5);
+  const defaultLayer = html.replace(/<details[\s\S]*?<\/details>/g, "");
+  assert.doesNotMatch(defaultLayer, /UTF-8|헤더|schema|hash 영수증/);
+  for (const phrase of ["바로 쓸 명단 받기", "확인할 명단 받기", "처리 증명 파일"]) assert.match(html, new RegExp(phrase));
   for (const forbidden of ["fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket", "localStorage", "indexedDB", "serviceWorker"]) {
     assert.equal(source.includes(forbidden), false, forbidden);
   }
@@ -132,6 +174,20 @@ test("static demo is networkless and its build receipt matches its bytes", async
   assert.match(source, /function clearResult\(\)/);
   assert.match(source, /anchor\.removeAttribute\("href"\)/);
   assert.match(source, /type: "tabular-intake:close"/);
+  assert.match(source, /preNormalizers: \{ date: "kr_resident_or_date" \}/);
+  assert.match(source, /encode\(`\\uFEFF/);
+  for (const code of [
+    "invalid_utf8", "malformed_csv", "row_width_mismatch", "invalid_header_mapping",
+    "invalid_rules", "limit_exceeded", "unsafe_spreadsheet_cell",
+  ]) {
+    assert.equal((source.match(new RegExp(`error_${code}:`, "g")) || []).length, 3, `localized error ${code}`);
+  }
+  for (const code of [
+    "missing_or_invalid_name", "missing_or_invalid_phone", "missing_or_invalid_date", "missing_or_invalid_item",
+    "closed_item", "blocked_phone", "blocked_name_date", "exact_duplicate", "name_date_match", "name_phone_match", "phone_date_match",
+  ]) {
+    assert.equal((source.match(new RegExp(`reason_${code}:`, "g")) || []).length, 3, `localized reason ${code}`);
+  }
   for (const [name, expected] of Object.entries(manifest.files)) {
     const actual = createHash("sha256").update(await readFile(resolve(destination, name))).digest("hex");
     assert.equal(actual, expected, name);
