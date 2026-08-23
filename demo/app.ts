@@ -204,6 +204,7 @@ let generation = 0;
 let lastOutput: IntakeOutput | null = null;
 let lastElapsed = 0;
 let lastError: { code: string; detail: string } | null = null;
+let lastStatusKey: string | null = null;
 
 function message(key: string): string { return messages[language][key] ?? messages.ko[key] ?? key; }
 
@@ -504,6 +505,7 @@ function report(error: unknown): void {
   const code = error instanceof IntakeError ? error.code : "unknown";
   const detail = error instanceof Error ? error.message : String(error);
   lastError = { code, detail };
+  lastStatusKey = null;
   const status = $("#status");
   status.dataset.error = "true";
   status.setAttribute("role", "alert");
@@ -514,6 +516,7 @@ function report(error: unknown): void {
 
 function setStatus(key: string): void {
   clearError();
+  lastStatusKey = key;
   $("#status").textContent = message(key);
 }
 
@@ -592,6 +595,7 @@ function loadSample(): void {
   generation += 1;
   clearResult();
   clearError();
+  lastStatusKey = null;
   sampleMode = true;
   sourceState = inspect(encode(sampleSource), message("sampleFile"));
   historyState = inspect(encode(sampleHistory), message("sampleFile"));
@@ -637,6 +641,7 @@ function applyLanguage(): void {
   if ($("#closed-rule .rule-choices").childElementCount || $("#blocked-rule .rule-choices").childElementCount) renderRules();
   if (lastOutput) renderResult(lastOutput);
   if (lastError) report(new IntakeError(lastError.code, lastError.detail));
+  else if (lastStatusKey) $("#status").textContent = message(lastStatusKey);
 }
 
 $("#language").addEventListener("change", event => { language = (event.currentTarget as HTMLSelectElement).value as Language; applyLanguage(); });
