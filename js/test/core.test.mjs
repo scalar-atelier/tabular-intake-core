@@ -171,6 +171,8 @@ test("static demo is networkless and its build receipt matches its bytes", async
     assert.equal(source.includes(forbidden), false, forbidden);
   }
   assert.match(source, /let generation = 0/);
+  assert.match(source, /let lastStatusKey: string \| null = null/);
+  assert.match(source, /else if \(lastStatusKey\) \$\("#status"\)\.textContent = message\(lastStatusKey\)/);
   assert.match(source, /function clearResult\(\)/);
   assert.match(source, /anchor\.removeAttribute\("href"\)/);
   assert.match(source, /type: "tabular-intake:close"/);
