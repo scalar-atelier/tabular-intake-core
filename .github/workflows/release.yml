@@ -58,8 +58,9 @@ jobs:
         run: |
           npm run build:demo
           npm pack
+          cp demo-dist/demo-build.json "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json"
           (cd demo-dist && zip -qr "../tabular-intake-demo-v${RELEASE_VERSION}.zip" .)
-          sha256sum dist/* "scalar-atelier-tabular-intake-core-${RELEASE_VERSION}.tgz" "tabular-intake-demo-v${RELEASE_VERSION}.zip" > SHA256SUMS
+          sha256sum dist/* "scalar-atelier-tabular-intake-core-${RELEASE_VERSION}.tgz" "tabular-intake-demo-v${RELEASE_VERSION}.zip" "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json" > SHA256SUMS
       - name: Smoke install built artifacts
         run: |
           python -m venv /tmp/tabular-intake-release
@@ -74,7 +75,7 @@ jobs:
         run: >-
           gh release create "$GITHUB_REF_NAME" --draft --title "tabular-intake-core $GITHUB_REF_NAME"
           --notes "Python, Node.js, and install-free browser release. Distribution ${RELEASE_VERSION} preserves deterministic core contract 0.1.0."
-          dist/* "scalar-atelier-tabular-intake-core-${RELEASE_VERSION}.tgz" "tabular-intake-demo-v${RELEASE_VERSION}.zip" SHA256SUMS
+          dist/* "scalar-atelier-tabular-intake-core-${RELEASE_VERSION}.tgz" "tabular-intake-demo-v${RELEASE_VERSION}.zip" "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json" SHA256SUMS
       - name: Publish Python package
         uses: pypa/gh-action-pypi-publish@release/v1
       - name: Publish npm package

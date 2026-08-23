@@ -1,0 +1,60 @@
+name: demo-release
+
+on:
+  push:
+    tags: ["demo-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Verify presentation tag
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^demo-v([0-9]+\.[0-9]+\.[0-9]+)-r[0-9]+$ ]]
+          VERSION="${GITHUB_REF_NAME#demo-v}"
+          VERSION="${VERSION%-r*}"
+          node -e "if (require('./package.json').version !== process.argv[1]) process.exit(1)" "$VERSION"
+      - run: npm ci
+      - run: npm test
+      - name: Build presentation assets
+        env:
+          SOURCE_TAG: ${{ github.ref_name }}
+        run: |
+          npm run build:demo
+          cp demo-dist/demo-build.json "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json"
+          (cd demo-dist && zip -qr "../tabular-intake-demo-${GITHUB_REF_NAME}.zip" .)
+          sha256sum "tabular-intake-demo-${GITHUB_REF_NAME}.zip" "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json" > SHA256SUMS
+      - name: Verify packaged receipt
+        run: |
+          mkdir /tmp/tabular-demo
+          unzip -q "tabular-intake-demo-${GITHUB_REF_NAME}.zip" -d /tmp/tabular-demo
+          cmp /tmp/tabular-demo/demo-build.json "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json"
+          node - <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const receipt = JSON.parse(fs.readFileSync('/tmp/tabular-demo/demo-build.json'));
+          if (receipt.packageVersion !== require('./package.json').version
+              || receipt.coreVersion !== '0.1.0'
+              || receipt.sourceTag !== process.env.GITHUB_REF_NAME
+              || receipt.sourceCommit !== process.env.GITHUB_SHA) process.exit(1);
+          for (const [name, expected] of Object.entries(receipt.files)) {
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(`/tmp/tabular-demo/${name}`)).digest('hex');
+            if (actual !== expected) process.exit(1);
+          }
+          JS
+          sha256sum -c SHA256SUMS
+      - name: Publish demo-only release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "tabular-intake demo $GITHUB_REF_NAME"
+          --notes "Presentation-only browser demo release. Package 0.2.2 and deterministic core contract 0.1.0 are unchanged."
+          "tabular-intake-demo-${GITHUB_REF_NAME}.zip" "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json" SHA256SUMS

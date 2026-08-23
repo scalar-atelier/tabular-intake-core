@@ -13,81 +13,78 @@
   <a class="skip-link" href="#demo-main">본문으로 건너뛰기</a>
   <header class="site-header">
     <a class="brand" href="https://scalar-inc.com" aria-label="SCALAR Atelier">
-      <span class="brand-mark" aria-hidden="true">S</span>
-      <span>SCALAR Atelier</span>
+      <span class="brand-mark" aria-hidden="true">S</span><span>SCALAR Atelier</span>
     </a>
     <label class="language-label" for="language"><span data-i18n="language">언어</span>
-      <select id="language">
-        <option value="ko">한국어</option>
-        <option value="en">English</option>
-        <option value="ja">日本語</option>
-      </select>
+      <select id="language"><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option></select>
     </label>
   </header>
 
   <main id="demo-main">
     <section class="hero" aria-labelledby="page-title">
-      <p class="eyebrow" data-i18n="eyebrow">설치 없는 로컬 CSV 도구</p>
-      <h1 id="page-title" data-i18n="title">CSV 명단을 바로 정리하세요</h1>
-      <p class="lead" data-i18n="lead">파일은 이 브라우저 밖으로 나가지 않습니다. 계정, API 키, 업로드가 필요 없습니다.</p>
-      <div class="privacy-proof" role="note">
-        <span aria-hidden="true">✓</span>
-        <span data-i18n="privacy">서버 전송 0회 · 브라우저 저장 0회 · AI 추론 0회</span>
-      </div>
-      <button id="sample-run" class="button button-primary" type="button" data-i18n="sample">합성 예제로 바로 보기</button>
+      <p class="eyebrow" data-i18n="eyebrow">설치 없이 명단 정리</p>
+      <h1 id="page-title" data-i18n="title">엑셀 명단을 올리면, 쓸 수 있는 목록과 확인할 목록으로 나눠드려요</h1>
+      <p class="lead" data-i18n="lead">엑셀이나 구글 시트에서 CSV로 저장한 명단을 고르세요. 파일은 이 브라우저 밖으로 나가지 않습니다.</p>
+      <div class="privacy-proof" role="note"><span aria-hidden="true">✓</span><span data-i18n="privacy">서버 전송 0회 · 브라우저 저장 0회 · AI 사용 0회</span></div>
+      <button id="sample-run" class="button button-primary" type="button" data-i18n="sample">예제로 먼저 따라 해보기</button>
     </section>
 
-    <section class="panel" aria-labelledby="source-title">
-      <div class="step-heading"><span>1</span><div><h2 id="source-title" data-i18n="sourceTitle">현재 명단 CSV</h2><p data-i18n="sourceHelp">첫 행에 헤더가 있는 UTF-8 CSV를 선택하세요.</p></div></div>
-      <label class="file-picker" for="source-file">
-        <strong data-i18n="sourceChoose">명단 CSV 선택</strong>
-        <span data-i18n="fileLimit">최대 20MiB · 파일 내용은 선택 후에도 전송되지 않습니다.</span>
-        <input id="source-file" type="file" accept=".csv,text/csv" required>
-      </label>
+    <ol class="stepper" aria-label="진행 단계" data-i18n-aria="progressAria">
+      <li data-step-indicator="0"><span>1</span><strong data-i18n="stepSource">명단 고르기</strong></li>
+      <li data-step-indicator="1"><span>2</span><strong data-i18n="stepMap">열 확인</strong></li>
+      <li data-step-indicator="2"><span>3</span><strong data-i18n="stepHistory">예전 명단</strong></li>
+      <li data-step-indicator="3"><span>4</span><strong data-i18n="stepRules">기준 확인</strong></li>
+      <li data-step-indicator="4"><span>5</span><strong data-i18n="stepResult">결과 받기</strong></li>
+    </ol>
+
+    <section class="panel demo-step" data-step="0" aria-labelledby="source-title">
+      <div class="step-heading"><span>1</span><div><h2 id="source-title" tabindex="-1" data-i18n="sourceTitle">정리할 명단을 골라주세요</h2><p data-i18n="sourceHelp">엑셀이나 구글 시트에서 저장한 명단 파일(.csv)이면 됩니다.</p></div></div>
+      <label class="file-picker" for="source-file"><strong data-i18n="sourceChoose">내 명단 파일 고르기</strong><span data-i18n="fileLimit">최대 20MiB · 파일 내용은 선택해도 전송되지 않습니다.</span><input id="source-file" type="file" accept=".csv,text/csv" required></label>
       <div id="source-info" class="file-info" hidden></div>
-      <div id="source-mapping" class="mapping-grid" hidden></div>
+      <details class="help-details"><summary data-i18n="fileHelpTitle">파일이 안 열릴 때</summary><p data-i18n="fileHelp">첫 줄에 열 이름이 있는 CSV 파일을 사용합니다. 기술 사양은 UTF-8, 최대 100,000줄입니다.</p></details>
+      <nav class="step-actions" aria-label="단계 이동" data-i18n-aria="navigationAria"><button class="button button-primary" type="button" data-next="1" data-i18n="next">다음</button></nav>
     </section>
 
-    <section class="panel" aria-labelledby="history-title">
-      <div class="step-heading"><span>2</span><div><h2 id="history-title" data-i18n="historyTitle">이전 명단 CSV</h2><p data-i18n="historyHelp">없으면 건너뛰어도 됩니다. 있으면 참여·차단 이력을 함께 확인합니다.</p></div></div>
-      <label class="file-picker file-picker-optional" for="history-file">
-        <strong data-i18n="historyChoose">이전 명단 선택 (선택)</strong>
-        <span data-i18n="historyLimit">같은 보안 경계에서 로컬로만 처리합니다.</span>
-        <input id="history-file" type="file" accept=".csv,text/csv">
-      </label>
-      <div id="history-info" class="file-info" hidden></div>
-      <div id="history-mapping" class="mapping-grid" hidden></div>
+    <section class="panel demo-step" data-step="1" aria-labelledby="mapping-title" hidden>
+      <div class="step-heading"><span>2</span><div><h2 id="mapping-title" tabindex="-1" data-i18n="mappingTitle">어느 열이 무엇인지 확인해주세요</h2><p data-i18n="mappingHelp">추천이 맞는지만 확인하면 됩니다. 예시는 내 기기에서만 보여요.</p></div></div>
+      <div id="source-mapping" class="mapping-grid"></div>
+      <nav class="step-actions" aria-label="단계 이동" data-i18n-aria="navigationAria"><button class="button button-quiet" type="button" data-back="0" data-i18n="previous">이전</button><button class="button button-primary" type="button" data-next="2" data-i18n="next">다음</button></nav>
     </section>
 
-    <section class="panel" aria-labelledby="rules-title">
-      <div class="step-heading"><span>3</span><div><h2 id="rules-title" data-i18n="rulesTitle">확인 규칙</h2><p data-i18n="rulesHelp">이름·전화·날짜·항목은 필수입니다. 반복 실행이나 자동 예약은 하지 않습니다.</p></div></div>
+    <section class="panel demo-step" data-step="2" aria-labelledby="history-title" hidden>
+      <div class="step-heading"><span>3</span><div><h2 id="history-title" tabindex="-1" data-i18n="historyTitle">예전에 처리한 명단이 있나요?</h2><p data-i18n="historyHelp">없어도 괜찮습니다. 있으면 예전 참여·차단 기록을 함께 확인합니다.</p></div></div>
+      <fieldset class="choice-box"><legend data-i18n="historyChoice">예전 명단 선택</legend><label><input type="radio" name="history-choice" value="none" checked> <span data-i18n="historyNone">없어요</span></label><label><input type="radio" name="history-choice" value="file"> <span data-i18n="historyHave">파일이 있어요</span></label></fieldset>
+      <div id="history-file-area" hidden>
+        <label class="file-picker file-picker-optional" for="history-file"><strong data-i18n="historyChoose">예전 명단 파일 고르기</strong><span data-i18n="historyLimit">이 파일도 브라우저 밖으로 보내지 않습니다.</span><input id="history-file" type="file" accept=".csv,text/csv"></label>
+        <div id="history-info" class="file-info" hidden></div><div id="history-mapping" class="mapping-grid" hidden></div>
+      </div>
+      <nav class="step-actions" aria-label="단계 이동" data-i18n-aria="navigationAria"><button class="button button-quiet" type="button" data-back="1" data-i18n="previous">이전</button><button class="button button-primary" type="button" data-next="3" data-i18n="next">다음</button></nav>
+    </section>
+
+    <section class="panel demo-step" data-step="3" aria-labelledby="rules-title" hidden>
+      <div class="step-heading"><span>4</span><div><h2 id="rules-title" tabindex="-1" data-i18n="rulesTitle">다시 볼 기준이 있나요?</h2><p data-i18n="rulesHelp">모르면 그대로 두세요. 파일에 있는 선택지를 보여드리며, 자동으로 확정하지 않습니다.</p></div></div>
       <div class="rule-grid">
-        <label><span data-i18n="closedValues">마감으로 볼 항목 값</span><input id="closed-values" value="closed,마감" autocomplete="off"></label>
-        <label><span data-i18n="blockedValues">차단으로 볼 이력 값</span><input id="blocked-values" value="blocked,차단" autocomplete="off"></label>
+        <fieldset id="closed-rule"><legend data-i18n="closedValues">이미 마감된 신청 항목</legend><div class="rule-choices"></div><label class="rule-other"><span data-i18n="otherValue">직접 입력</span><input id="closed-other" autocomplete="off"></label></fieldset>
+        <fieldset id="blocked-rule"><legend data-i18n="blockedValues">다시 확인할 예전 기록</legend><div class="rule-choices"></div><label class="rule-other"><span data-i18n="otherValue">직접 입력</span><input id="blocked-other" autocomplete="off"></label></fieldset>
       </div>
-      <button id="run" class="button button-primary" type="button" data-i18n="run">이 브라우저에서 정리하기</button>
-      <button id="reset" class="button button-quiet" type="button" data-i18n="reset">모두 지우기</button>
-      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <button id="run" class="button button-primary" type="button" data-i18n="run">이 브라우저에서 명단 나누기</button>
+      <nav class="step-actions" aria-label="단계 이동" data-i18n-aria="navigationAria"><button class="button button-quiet" type="button" data-back="2" data-i18n="previous">이전</button></nav>
     </section>
 
-    <section id="result" class="panel result" aria-labelledby="result-title" hidden>
-      <p class="eyebrow" data-i18n="resultEyebrow">로컬 처리 완료</p>
-      <h2 id="result-title" tabindex="-1" data-i18n="resultTitle">정리 결과</h2>
+    <section id="result" class="panel result demo-step" data-step="4" aria-labelledby="result-title" hidden>
+      <p class="eyebrow" data-i18n="resultEyebrow">기기 안에서 정리 완료</p><h2 id="result-title" tabindex="-1" data-i18n="resultTitle">이제 두 목록만 확인하세요</h2><p class="result-lead" data-i18n="resultLead">바로 쓸 수 있는 명단과 사람이 확인할 명단을 따로 만들었습니다.</p>
       <div id="summary" class="summary-grid"></div>
-      <div class="download-row">
-        <a class="button button-secondary" data-download="normalized" data-i18n="downloadNormalized">정리된 명단 받기</a>
-        <a class="button button-secondary" data-download="review" data-i18n="downloadReview">검토 목록 받기</a>
-        <a class="button button-secondary" data-download="manifest" data-i18n="downloadManifest">hash 영수증 받기</a>
-      </div>
-      <div class="result-columns">
-        <section><h3 data-i18n="normalizedPreview">정리된 명단 미리보기</h3><div id="normalized-preview" class="table-wrap"></div></section>
-        <section><h3 data-i18n="reviewPreview">검토 목록 미리보기</h3><div id="review-preview" class="table-wrap"></div></section>
-      </div>
-      <details class="technical"><summary data-i18n="technical">기술 정보</summary><pre id="manifest"></pre></details>
-      <button id="guided-intake" class="button button-primary" type="button" hidden data-i18n="guided">이 업무를 반복 흐름으로 가져오기</button>
+      <div class="download-row" aria-label="주요 결과 다운로드" data-i18n-aria="downloadAria"><a class="button button-primary" data-download="consumer-normalized" data-i18n="downloadNormalized">바로 쓸 명단 받기</a><a class="button button-secondary" data-download="consumer-review" data-i18n="downloadReview">확인할 명단 받기</a></div>
+      <p class="download-note" data-i18n="downloadNote">엑셀에서 바로 열 수 있도록 만든 파일입니다.</p>
+      <details class="result-preview"><summary data-i18n="previewTitle">명단 내용 미리보기</summary><div class="result-columns"><section><h3 data-i18n="normalizedPreview">바로 쓸 명단</h3><div id="normalized-preview" class="table-wrap"></div></section><section><h3 data-i18n="reviewPreview">확인할 명단</h3><div id="review-preview" class="table-wrap"></div></section></div></details>
+      <details class="technical"><summary data-i18n="technical">기술 정보와 처리 증명 파일</summary><p data-i18n="proofHelp">처리 증명 파일은 같은 파일과 기준으로 처리됐는지 기술 담당자가 확인하는 자료입니다.</p><div class="technical-downloads"><a data-download="normalized" data-i18n="downloadCanonicalNormalized">원본 형식의 normalized.csv</a><a data-download="review" data-i18n="downloadCanonicalReview">원본 형식의 review.csv</a><a data-download="manifest" data-i18n="downloadManifest">처리 증명 파일</a></div><pre id="manifest"></pre></details>
+      <button id="guided-intake" class="button button-primary" type="button" hidden data-i18n="guided">이 업무를 반복 흐름으로 가져오기</button><button id="reset" class="button button-quiet" type="button" data-i18n="reset">모두 지우고 다시 시작</button>
+      <nav class="step-actions" aria-label="단계 이동" data-i18n-aria="navigationAria"><button class="button button-quiet" type="button" data-back="3" data-i18n="previous">이전</button></nav>
     </section>
-  </main>
 
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <details id="error-technical" class="error-technical" hidden><summary data-i18n="technicalError">기술 오류 정보</summary><code id="error-code"></code></details>
+  </main>
   <footer><span>MIT · tabular-intake-core</span><span id="version"></span></footer>
 </body>
 </html>

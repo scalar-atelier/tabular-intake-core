@@ -7,7 +7,7 @@ on:
     inputs:
       release_tag:
         description: Release tag whose demo zip should be deployed
-        required: false
+        required: true
         type: string
 
 permissions:
@@ -26,18 +26,34 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
       - name: Download released demo
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
+          test -n "$RELEASE_TAG"
           mkdir demo-dist
-          if [ -n "$RELEASE_TAG" ]; then
-            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "tabular-intake-demo-*.zip"
-          else
-            gh release download --repo "$GITHUB_REPOSITORY" --pattern "tabular-intake-demo-*.zip"
-          fi
-          unzip -q tabular-intake-demo-*.zip -d demo-dist
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "tabular-intake-demo-${RELEASE_TAG}.zip"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "tabular-intake-demo-${RELEASE_TAG}-receipt.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS
+          grep -E "tabular-intake-demo-${RELEASE_TAG}(\.zip|-receipt\.json)$" SHA256SUMS | sha256sum -c -
+          unzip -q "tabular-intake-demo-${RELEASE_TAG}.zip" -d demo-dist
+          cmp demo-dist/demo-build.json "tabular-intake-demo-${RELEASE_TAG}-receipt.json"
+          EXPECTED_COMMIT="$(git rev-parse HEAD)"
+          export EXPECTED_COMMIT
+          node - <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const receipt = JSON.parse(fs.readFileSync('demo-dist/demo-build.json'));
+          if (receipt.sourceTag !== process.env.RELEASE_TAG || receipt.sourceCommit !== process.env.EXPECTED_COMMIT) process.exit(1);
+          for (const [name, expected] of Object.entries(receipt.files)) {
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(`demo-dist/${name}`)).digest('hex');
+            if (actual !== expected) process.exit(1);
+          }
+          JS
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
