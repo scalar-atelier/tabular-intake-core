@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>CSV 명단 빠르게 정리 · SCALAR Atelier</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="./styles.css">
   <script type="module" src="./app.js"></script>
 </head>
@@ -23,7 +24,7 @@
   <main id="demo-main">
     <section class="hero" aria-labelledby="page-title">
       <p class="eyebrow" data-i18n="eyebrow">설치 없이 명단 정리</p>
-      <h1 id="page-title" data-i18n="title">엑셀 명단을 올리면, 쓸 수 있는 목록과 확인할 목록으로 나눠드려요</h1>
+      <h1 id="page-title" data-i18n="title">신청·예약 명단을 올리면, 안내 준비 명단과 확인할 명단으로 나눠드려요</h1>
       <p class="lead" data-i18n="lead">엑셀이나 구글 시트에서 CSV로 저장한 명단을 고르세요. 파일은 이 브라우저 밖으로 나가지 않습니다.</p>
       <div class="privacy-proof" role="note"><span aria-hidden="true">✓</span><span data-i18n="privacy">서버 전송 0회 · 브라우저 저장 0회 · AI 사용 0회</span></div>
       <button id="sample-run" class="button button-primary" type="button" data-i18n="sample">예제로 먼저 따라 해보기</button>
@@ -40,6 +41,7 @@
     <section class="panel demo-step" data-step="0" aria-labelledby="source-title">
       <div class="step-heading"><span>1</span><div><h2 id="source-title" tabindex="-1" data-i18n="sourceTitle">정리할 명단을 골라주세요</h2><p data-i18n="sourceHelp">엑셀이나 구글 시트에서 저장한 명단 파일(.csv)이면 됩니다.</p></div></div>
       <label class="file-picker" for="source-file"><strong data-i18n="sourceChoose">내 명단 파일 고르기</strong><span data-i18n="fileLimit">최대 20MiB · 파일 내용은 선택해도 전송되지 않습니다.</span><input id="source-file" type="file" accept=".csv,text/csv" required></label>
+      <p class="profile-note" data-i18n="phoneProfile">전화번호 확인은 한국 휴대전화 형식(010)을 기준으로 합니다.</p>
       <div id="source-info" class="file-info" hidden></div>
       <details class="help-details"><summary data-i18n="fileHelpTitle">파일이 안 열릴 때</summary><p data-i18n="fileHelp">첫 줄에 열 이름이 있는 CSV 파일을 사용합니다. 기술 사양은 UTF-8, 최대 100,000줄입니다.</p></details>
       <nav class="step-actions" aria-label="단계 이동" data-i18n-aria="navigationAria"><button class="button button-primary" type="button" data-next="1" data-i18n="next">다음</button></nav>
@@ -72,13 +74,13 @@
     </section>
 
     <section id="result" class="panel result demo-step" data-step="4" aria-labelledby="result-title" hidden>
-      <p class="eyebrow" data-i18n="resultEyebrow">기기 안에서 정리 완료</p><h2 id="result-title" tabindex="-1" data-i18n="resultTitle">이제 두 목록만 확인하세요</h2><p class="result-lead" data-i18n="resultLead">바로 쓸 수 있는 명단과 사람이 확인할 명단을 따로 만들었습니다.</p>
+      <p class="eyebrow" data-i18n="resultEyebrow">기기 안에서 정리 완료</p><h2 id="result-title" tabindex="-1" data-i18n="resultTitle">문자나 안내를 보내기 전에 두 목록을 확인하세요</h2><p class="result-lead" data-i18n="resultLead">형식이 정리된 안내 준비 명단과 사람이 먼저 확인할 명단을 따로 만들었습니다.</p><p class="result-caution" data-i18n="contactNotice">이 도구는 발송 동의나 실제 수신 대상을 판단하지 않습니다. 보내기 전 담당자가 최종 확인하세요.</p>
       <div id="summary" class="summary-grid"></div>
-      <div class="download-row" aria-label="주요 결과 다운로드" data-i18n-aria="downloadAria"><a class="button button-primary" data-download="consumer-normalized" data-i18n="downloadNormalized">바로 쓸 명단 받기</a><a class="button button-secondary" data-download="consumer-review" data-i18n="downloadReview">확인할 명단 받기</a></div>
+      <div class="download-row" aria-label="주요 결과 다운로드" data-i18n-aria="downloadAria"><a class="button button-primary" data-download="consumer-normalized" data-i18n="downloadNormalized">안내 준비 명단 받기</a><a class="button button-secondary" data-download="consumer-review" data-i18n="downloadReview">확인할 명단 받기</a></div>
       <p class="download-note" data-i18n="downloadNote">엑셀에서 바로 열 수 있도록 만든 파일입니다.</p>
-      <details class="result-preview"><summary data-i18n="previewTitle">명단 내용 미리보기</summary><div class="result-columns"><section><h3 data-i18n="normalizedPreview">바로 쓸 명단</h3><div id="normalized-preview" class="table-wrap"></div></section><section><h3 data-i18n="reviewPreview">확인할 명단</h3><div id="review-preview" class="table-wrap"></div></section></div></details>
+      <details class="result-preview"><summary data-i18n="previewTitle">명단 내용 미리보기</summary><div class="result-columns"><section><h3 data-i18n="normalizedPreview">안내 준비 명단</h3><div id="normalized-preview" class="table-wrap"></div></section><section><h3 data-i18n="reviewPreview">확인할 명단</h3><div id="review-preview" class="table-wrap"></div></section></div></details>
       <details class="technical"><summary data-i18n="technical">기술 정보와 처리 증명 파일</summary><p data-i18n="proofHelp">처리 증명 파일은 같은 파일과 기준으로 처리됐는지 기술 담당자가 확인하는 자료입니다.</p><div class="technical-downloads"><a data-download="normalized" data-i18n="downloadCanonicalNormalized">원본 형식의 normalized.csv</a><a data-download="review" data-i18n="downloadCanonicalReview">원본 형식의 review.csv</a><a data-download="manifest" data-i18n="downloadManifest">처리 증명 파일</a></div><pre id="manifest"></pre></details>
-      <button id="guided-intake" class="button button-primary" type="button" hidden data-i18n="guided">이 업무를 반복 흐름으로 가져오기</button><button id="reset" class="button button-quiet" type="button" data-i18n="reset">모두 지우고 다시 시작</button>
+      <p id="guided-note" class="guided-note" hidden data-i18n="guidedHelp">이 화면의 파일은 넘기지 않습니다. 다음 화면에서 원본을 다시 골라 진단합니다.</p><button id="guided-intake" class="button button-primary" type="button" hidden data-i18n="guided">반복 업무 가져오기 시작</button><button id="reset" class="button button-quiet" type="button" data-i18n="reset">모두 지우고 다시 시작</button>
       <nav class="step-actions" aria-label="단계 이동" data-i18n-aria="navigationAria"><button class="button button-quiet" type="button" data-back="3" data-i18n="previous">이전</button></nav>
     </section>
 

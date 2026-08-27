@@ -6,7 +6,7 @@ Deterministic CSV normalization and review classification for real intake roster
 
 [Open the guided browser demo](https://scalar-atelier.github.io/tabular-intake-core/) · [Open the company demo](https://scalar-inc.com/demo/tabular-intake/)
 
-Choose a `.csv` saved from Excel or Google Sheets. The demo asks which columns contain the name, phone number, date, and application choice, then downloads a ready list and a separate check list. Files stay in browser memory. There is no upload, account, API key, telemetry, browser storage, or AI header inference.
+Choose a registration or booking `.csv` saved from Excel or Google Sheets. The demo asks which columns contain the name, phone number, date, and application choice, then downloads a formatted outreach worklist and a separate check list. Files stay in browser memory. There is no upload, account, API key, telemetry, browser storage, or AI header inference. The demo does not decide messaging consent or recipients; an operator must make that final check.
 
 ## For developers: Python or npm
 
