@@ -541,7 +541,7 @@ function showStep(step: number, focus = true): void {
   if (focus) {
     const section = document.querySelector<HTMLElement>(`.demo-step[data-step="${currentStep}"]`);
     section?.scrollIntoView({ block: "start" });
-    section?.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+    setTimeout(() => section?.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true }), 0);
   }
 }
 
