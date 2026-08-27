@@ -538,11 +538,11 @@ function showStep(step: number, focus = true): void {
     if (index === currentStep) item.setAttribute("aria-current", "step"); else item.removeAttribute("aria-current");
     item.dataset.complete = index < currentStep ? "true" : "false";
   });
-  if (focus) requestAnimationFrame(() => {
+  if (focus) {
     const section = document.querySelector<HTMLElement>(`.demo-step[data-step="${currentStep}"]`);
     section?.scrollIntoView({ block: "start" });
     section?.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
-  });
+  }
 }
 
 async function loadFile(kind: InputKind, file: File | undefined): Promise<void> {
