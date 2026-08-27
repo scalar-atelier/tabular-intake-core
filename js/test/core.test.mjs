@@ -161,6 +161,7 @@ test("static demo is networkless and its build receipt matches its bytes", async
     readFile(resolve(destination, "demo-build.json"), "utf8").then(JSON.parse),
   ]);
   assert.match(html, /connect-src 'none'/);
+  assert.match(html, /rel="icon" href="data:,"/);
   assert.match(html, /id="source-file"/);
   assert.match(html, /aria-live="polite"/);
   assert.equal((html.match(/class="panel[^"\n]*demo-step"/g) || []).length, 5);
