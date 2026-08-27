@@ -155,8 +155,9 @@ test("demo-only Korean fixture explains every consumer outcome without changing 
 
 test("static demo is networkless and its build receipt matches its bytes", async () => {
   const destination = resolve(root, "demo-dist");
-  const [html, source, manifest] = await Promise.all([
+  const [html, styles, source, manifest] = await Promise.all([
     readFile(resolve(destination, "index.html"), "utf8"),
+    readFile(resolve(destination, "styles.css"), "utf8"),
     readFile(resolve(root, "demo/app.ts"), "utf8"),
     readFile(resolve(destination, "demo-build.json"), "utf8").then(JSON.parse),
   ]);
@@ -164,6 +165,7 @@ test("static demo is networkless and its build receipt matches its bytes", async
   assert.match(html, /rel="icon" href="data:,"/);
   assert.match(html, /id="source-file"/);
   assert.match(html, /aria-live="polite"/);
+  assert.match(styles, /\.file-picker input \{ width:100%;min-width:0;/);
   assert.equal((html.match(/class="panel[^"\n]*demo-step"/g) || []).length, 5);
   const defaultLayer = html.replace(/<details[\s\S]*?<\/details>/g, "");
   assert.doesNotMatch(defaultLayer, /UTF-8|헤더|schema|hash 영수증/);
