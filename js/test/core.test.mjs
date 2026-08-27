@@ -166,7 +166,7 @@ test("static demo is networkless and its build receipt matches its bytes", async
   assert.equal((html.match(/class="panel[^"\n]*demo-step"/g) || []).length, 5);
   const defaultLayer = html.replace(/<details[\s\S]*?<\/details>/g, "");
   assert.doesNotMatch(defaultLayer, /UTF-8|헤더|schema|hash 영수증/);
-  for (const phrase of ["바로 쓸 명단 받기", "확인할 명단 받기", "처리 증명 파일"]) assert.match(html, new RegExp(phrase));
+  for (const phrase of ["안내 준비 명단 받기", "확인할 명단 받기", "발송 동의", "처리 증명 파일"]) assert.match(html, new RegExp(phrase));
   for (const forbidden of ["fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket", "localStorage", "indexedDB", "serviceWorker"]) {
     assert.equal(source.includes(forbidden), false, forbidden);
   }
@@ -178,6 +178,10 @@ test("static demo is networkless and its build receipt matches its bytes", async
   assert.match(source, /type: "tabular-intake:close"/);
   assert.match(source, /preNormalizers: \{ date: "kr_resident_or_date" \}/);
   assert.match(source, /encode\(`\\uFEFF/);
+  assert.match(source, /row\.intake_status === "ready"/);
+  for (const filename of ["안내-준비-명단.csv", "확인할-명단.csv", "outreach-worklist.csv", "roster-to-check.csv"]) {
+    assert.match(source, new RegExp(filename));
+  }
   for (const code of [
     "invalid_utf8", "malformed_csv", "row_width_mismatch", "invalid_header_mapping",
     "invalid_rules", "limit_exceeded", "unsafe_spreadsheet_cell",
