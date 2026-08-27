@@ -35,7 +35,8 @@ const messages: Record<Language, Record<string, string>> = {
     progressAria: "명단 정리 진행 단계", navigationAria: "단계 이동", downloadAria: "주요 결과 다운로드",
     sourceTitle: "정리할 명단을 골라주세요", sourceHelp: "엑셀이나 구글 시트에서 저장한 명단 파일(.csv)이면 됩니다.",
     sourceChoose: "내 명단 파일 고르기", fileLimit: "최대 20MiB · 파일 내용은 선택해도 전송되지 않습니다.",
-    fileHelpTitle: "파일이 안 열릴 때", fileHelp: "첫 줄에 열 이름이 있는 CSV 파일을 사용합니다. 기술 사양은 UTF-8, 최대 100,000줄입니다.",
+    fileHelpTitle: "CSV 파일 만드는 법", fileHelp: "엑셀은 ‘파일 → 다른 이름으로 저장 → CSV UTF-8’, 구글 시트는 ‘파일 → 다운로드 → 쉼표로 구분된 값(.csv)’을 고르세요. 첫 줄의 열 이름은 남겨둡니다.",
+    phoneProfile: "전화번호 확인은 한국 휴대전화 형식(010)을 기준으로 합니다.",
     mappingTitle: "어느 열이 무엇인지 확인해주세요", mappingHelp: "추천이 맞는지만 확인하면 됩니다. 예시는 내 기기에서만 보여요.",
     historyTitle: "예전에 처리한 명단이 있나요?", historyHelp: "없어도 괜찮습니다. 있으면 예전 참여·차단 기록을 함께 확인합니다.",
     historyChoice: "예전 명단 선택", historyNone: "없어요", historyHave: "파일이 있어요", historyChoose: "예전 명단 파일 고르기",
@@ -50,7 +51,7 @@ const messages: Record<Language, Record<string, string>> = {
     previewTitle: "명단 내용 미리보기", normalizedPreview: "안내 준비 명단", reviewPreview: "확인할 명단",
     technical: "기술 정보와 처리 증명 파일", proofHelp: "처리 증명 파일은 같은 파일과 기준으로 처리됐는지 기술 담당자가 확인하는 자료입니다.",
     downloadCanonicalNormalized: "원본 형식의 normalized.csv", downloadCanonicalReview: "원본 형식의 review.csv", downloadManifest: "처리 증명 파일",
-    guided: "이 업무를 반복 흐름으로 가져오기", technicalError: "기술 오류 정보",
+    guided: "반복 업무 가져오기 시작", guidedHelp: "이 화면의 파일은 넘기지 않습니다. 다음 화면에서 원본을 다시 골라 진단합니다.", technicalError: "기술 오류 정보",
     fileReady: "파일을 읽었습니다", sampleFile: "연습용 명단", rows: "명", columns: "개 항목", choose: "열을 선택하세요", optional: "사용하지 않음",
     recommended: "추천됨 · 맞는지 확인해주세요", examples: "파일 속 예시", noExample: "빈 값만 있어요",
     sampleLoaded: "연습용 명단을 준비했습니다. 1단계부터 ‘다음’을 눌러 확인해보세요.", resultReady: "명단을 나눴습니다. 두 파일을 내려받아 확인하세요.",
@@ -83,7 +84,8 @@ const messages: Record<Language, Record<string, string>> = {
     progressAria: "Roster cleanup progress", navigationAria: "Step navigation", downloadAria: "Main result downloads",
     sourceTitle: "Choose the roster to clean", sourceHelp: "Use a .csv saved from Excel or Google Sheets.", sourceChoose: "Choose my roster file",
     fileLimit: "20MiB maximum · Choosing a file does not upload it.", fileHelpTitle: "If the file will not open",
-    fileHelp: "Use a CSV whose first row contains column names. Technical format: UTF-8, up to 100,000 rows.",
+    fileHelp: "In Excel choose File → Save As → CSV UTF-8. In Google Sheets choose File → Download → Comma-separated values (.csv). Keep the column names in the first row.",
+    phoneProfile: "Phone-number checks currently use the Korean mobile format beginning with 010.",
     mappingTitle: "Check what each column means", mappingHelp: "Confirm the suggestions. Examples are shown only on your device.",
     historyTitle: "Do you have a roster from an earlier run?", historyHelp: "It is optional. Add one to check prior participation or blocks.",
     historyChoice: "Past roster", historyNone: "No", historyHave: "I have a file", historyChoose: "Choose the past roster",
@@ -97,7 +99,7 @@ const messages: Record<Language, Record<string, string>> = {
     previewTitle: "Preview the lists", normalizedPreview: "Outreach worklist", reviewPreview: "Check list", technical: "Technical details and processing proof",
     proofHelp: "The processing proof lets a technical reviewer confirm that the same files and rules produced these results.",
     downloadCanonicalNormalized: "Canonical normalized.csv", downloadCanonicalReview: "Canonical review.csv", downloadManifest: "Processing proof file",
-    guided: "Bring this into a repeatable workflow", technicalError: "Technical error details",
+    guided: "Start a repeatable-workflow intake", guidedHelp: "This screen does not transfer your files. Choose the source again on the next screen so it can be audited.", technicalError: "Technical error details",
     fileReady: "File loaded", sampleFile: "Practice roster", rows: "people", columns: "columns", choose: "Choose a column", optional: "Do not use",
     recommended: "Suggested · please confirm", examples: "Examples in this file", noExample: "Only blank values", sampleLoaded: "The practice roster is ready. Start at step 1 and press Next.",
     resultReady: "The lists are ready. Download both files and review them.",
@@ -127,7 +129,8 @@ const messages: Record<Language, Record<string, string>> = {
     progressAria: "名簿整理の進行", navigationAria: "手順の移動", downloadAria: "主な結果のダウンロード",
     sourceTitle: "整理する名簿を選んでください", sourceHelp: "ExcelやGoogleスプレッドシートから保存した.csvを使えます。", sourceChoose: "名簿ファイルを選ぶ",
     fileLimit: "最大20MiB · 選んでもアップロードされません。", fileHelpTitle: "ファイルを開けないとき",
-    fileHelp: "1行目に列名があるCSVを使います。技術仕様はUTF-8、最大100,000行です。",
+    fileHelp: "Excelでは「ファイル → 名前を付けて保存 → CSV UTF-8」、Googleスプレッドシートでは「ファイル → ダウンロード → カンマ区切り形式（.csv）」を選び、1行目の列名を残してください。",
+    phoneProfile: "電話番号の確認は、現在韓国の携帯電話形式（010）を基準にしています。",
     mappingTitle: "各列の意味を確認してください", mappingHelp: "候補が合っているか確認します。例は端末内だけに表示されます。",
     historyTitle: "以前に処理した名簿がありますか？", historyHelp: "なくても大丈夫です。ある場合は過去の参加・ブロック記録も確認します。",
     historyChoice: "過去名簿", historyNone: "ありません", historyHave: "ファイルがあります", historyChoose: "過去名簿を選ぶ", historyLimit: "このファイルもブラウザーの外へ送りません。",
@@ -140,7 +143,7 @@ const messages: Record<Language, Record<string, string>> = {
     previewTitle: "名簿をプレビュー", normalizedPreview: "案内準備名簿", reviewPreview: "確認する名簿", technical: "技術情報と処理証明ファイル",
     proofHelp: "処理証明ファイルは、同じファイルと基準で処理されたかを技術担当者が確認する資料です。",
     downloadCanonicalNormalized: "元形式のnormalized.csv", downloadCanonicalReview: "元形式のreview.csv", downloadManifest: "処理証明ファイル",
-    guided: "反復ワークフローに取り込む", technicalError: "技術エラー情報",
+    guided: "反復業務の取り込みを開始", guidedHelp: "この画面のファイルは引き継ぎません。次の画面でもう一度原本を選び、診断します。", technicalError: "技術エラー情報",
     fileReady: "ファイルを読み込みました", sampleFile: "練習用名簿", rows: "人", columns: "項目", choose: "列を選ぶ", optional: "使用しない",
     recommended: "候補 · 確認してください", examples: "ファイル内の例", noExample: "空欄のみ", sampleLoaded: "練習用名簿を用意しました。手順1から「次へ」を押してください。",
     resultReady: "名簿を分けました。2つのファイルを保存して確認してください。",
@@ -525,6 +528,10 @@ function setStatus(key: string): void {
 
 function showStep(step: number, focus = true): void {
   currentStep = Math.max(0, Math.min(4, step));
+  if (currentStep > 0 && lastStatusKey === "sampleLoaded") {
+    lastStatusKey = null;
+    $("#status").textContent = "";
+  }
   document.querySelectorAll<HTMLElement>(".demo-step").forEach(section => { section.hidden = Number(section.dataset.step) !== currentStep; });
   document.querySelectorAll<HTMLElement>("[data-step-indicator]").forEach(item => {
     const index = Number(item.dataset.stepIndicator);
@@ -668,6 +675,7 @@ $("#reset").addEventListener("click", reset);
 const embedded = new URLSearchParams(location.search).get("atelier") === "1";
 document.documentElement.dataset.embedded = String(embedded);
 $("#guided-intake").hidden = !embedded;
+$("#guided-note").hidden = !embedded;
 $("#guided-intake").addEventListener("click", () => window.parent.postMessage({ type: "tabular-intake:open-guided" }, location.origin));
 if (embedded) window.addEventListener("keydown", event => {
   if (event.key === "Escape") window.parent.postMessage({ type: "tabular-intake:close" }, location.origin);

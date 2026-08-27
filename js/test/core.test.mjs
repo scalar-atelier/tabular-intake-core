@@ -166,7 +166,7 @@ test("static demo is networkless and its build receipt matches its bytes", async
   assert.equal((html.match(/class="panel[^"\n]*demo-step"/g) || []).length, 5);
   const defaultLayer = html.replace(/<details[\s\S]*?<\/details>/g, "");
   assert.doesNotMatch(defaultLayer, /UTF-8|헤더|schema|hash 영수증/);
-  for (const phrase of ["안내 준비 명단 받기", "확인할 명단 받기", "발송 동의", "처리 증명 파일"]) assert.match(html, new RegExp(phrase));
+  for (const phrase of ["안내 준비 명단 받기", "확인할 명단 받기", "발송 동의", "한국 휴대전화", "반복 업무 가져오기 시작", "처리 증명 파일"]) assert.match(html, new RegExp(phrase));
   for (const forbidden of ["fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket", "localStorage", "indexedDB", "serviceWorker"]) {
     assert.equal(source.includes(forbidden), false, forbidden);
   }
@@ -174,6 +174,7 @@ test("static demo is networkless and its build receipt matches its bytes", async
   assert.match(source, /let lastStatusKey: string \| null = null/);
   assert.match(source, /else if \(lastStatusKey\) \$\("#status"\)\.textContent = message\(lastStatusKey\)/);
   assert.match(source, /function clearResult\(\)/);
+  assert.match(source, /lastStatusKey === "sampleLoaded"/);
   assert.match(source, /anchor\.removeAttribute\("href"\)/);
   assert.match(source, /type: "tabular-intake:close"/);
   assert.match(source, /preNormalizers: \{ date: "kr_resident_or_date" \}/);

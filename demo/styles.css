@@ -43,6 +43,7 @@ h1 { max-width:820px;margin:0 auto;font-family:Georgia,"Noto Serif KR",serif;fon
 .file-picker input { margin-top:.45rem;max-width:100%; }
 .file-picker-optional { background:#faf9f5;border-color:#aea99e; }
 .file-info { margin-top:1rem;padding:.85rem 1rem;border-radius:.65rem;background:#edf3ef;color:#39564e;font-size:.9rem; }
+.profile-note,.guided-note { margin:.8rem 0 0;color:#5e6c66;font-size:.84rem;line-height:1.5; }
 .file-info strong { display:block;margin-bottom:.25rem; }
 .header-list { display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.45rem; }
 .header-list code { padding:.2rem .45rem;border-radius:.35rem;background:#fff;color:#354e47; }
