@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: "24"
           package-manager-cache: false
-      - name: Verify presentation tag
+      - name: Verify demo tag
         run: |
           [[ "$GITHUB_REF_NAME" =~ ^demo-v([0-9]+\.[0-9]+\.[0-9]+)-r[0-9]+$ ]]
           git fetch --no-tags origin main
@@ -28,7 +28,7 @@ jobs:
           node -e "if (require('./package.json').version !== process.argv[1]) process.exit(1)" "$VERSION"
       - run: npm ci
       - run: npm test
-      - name: Build presentation assets
+      - name: Build demo assets
         env:
           SOURCE_TAG: ${{ github.ref_name }}
         run: |
@@ -58,7 +58,18 @@ jobs:
       - name: Publish demo-only release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "tabular-intake demo $GITHUB_REF_NAME"
-          --notes "Presentation-only browser demo release. Package 0.2.3 and deterministic core contract 0.1.1 are unchanged."
-          "tabular-intake-demo-${GITHUB_REF_NAME}.zip" "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json" SHA256SUMS
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const receipt = JSON.parse(fs.readFileSync('demo-dist/demo-build.json'));
+          fs.writeFileSync('demo-release-notes.md', [
+            `Browser demo built from source commit ${receipt.sourceCommit}.`,
+            `Source metadata: package ${receipt.packageVersion}; deterministic core contract ${receipt.coreVersion}.`,
+            '',
+            'This release publishes browser assets only. The version fields identify the build source; they do not assert that corresponding npm or PyPI packages have been published.',
+            '',
+          ].join('\n'));
+          JS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "tabular-intake demo $GITHUB_REF_NAME" \
+            --notes-file demo-release-notes.md \
+            "tabular-intake-demo-${GITHUB_REF_NAME}.zip" "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json" SHA256SUMS
