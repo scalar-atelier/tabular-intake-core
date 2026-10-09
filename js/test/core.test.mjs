@@ -77,7 +77,7 @@ test("Python golden pack stays byte-identical in TypeScript", async () => {
     blocked_candidate: 2,
     closed: 1,
   });
-  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.3.0", "0.1.0"]);
+  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.3.0", "0.1.1"]);
   assert.equal(normalizePhone("+82 10-1234-5678"), "01012345678");
   assert.equal(normalizeDate("1990. 2. 3"), "1990-02-03");
 });
@@ -165,6 +165,15 @@ test("generic table cleanup is deterministic, concurrent-safe, and review-only",
   assert.match(manifest.operationId, /^tc_[0-9a-f]{24}$/);
 });
 
+test("generic cleanup preserves quoted headers and prototype-named cells", async () => {
+  const profile = { schemaVersion: "scalar-table-cleanup-profile/v1", columns: [{ source: "raw", output: 'Name, "alias"', transform: "text" }, { source: "key", output: "__proto__", transform: "enum", enumMap: JSON.parse('{"__proto__":"mapped"}') }] };
+  const result = await runTableCleanup({ source: encoder.encode("raw,key\nA,__proto__\n"), profile });
+  assert.equal(new TextDecoder().decode(result.cleanedCsv), '"Name, ""alias""",__proto__,_atelier_status,_atelier_review\nA,mapped,ready,\n');
+  const unknown = await runTableCleanup({ source: encoder.encode("raw,key\nA,toString\n"), profile });
+  assert.equal(unknown.summary.review, 1);
+  assert.match(new TextDecoder().decode(unknown.reviewCsv), /A,toString,review,invalid:__proto__/);
+});
+
 test("generic table cleanup rejects profile drift and spreadsheet formulas", async () => {
   await assert.rejects(
     runTableCleanup({ source: cleanupSource, profile: { ...cleanupProfile, future: true } }),
@@ -241,4 +250,26 @@ test("static demo is networkless and its build receipt matches its bytes", async
     const actual = createHash("sha256").update(await readFile(resolve(destination, name))).digest("hex");
     assert.equal(actual, expected, name);
   }
+});
+
+test("duplicate candidates remain available to find overlapping two-of-three matches", async () => {
+  const source = encoder.encode("source_id,name,phone,date,item\n1,Example,01012345678,1990-02-03,open\n2,Example,01012345678,1990-02-03,open\n3,Example,01098765432,1990-02-03,open\n4,Other,01098765432,1990-02-03,open\n");
+  for (const count of [3, 4]) {
+    const input = encoder.encode(new TextDecoder().decode(source).split("\n").slice(0, count + 1).join("\n") + "\n");
+    const result = await runIntake({ source: input, rules: JSON.parse(await readFile(resolve(sample, "rules.json"), "utf8")) });
+    assert.equal(result.summary.normal, 0);
+    assert.equal(result.summary.duplicate_candidate, count);
+    assert.match(new TextDecoder().decode(result.normalizedCsv), /3,,Example,01098765432,1990-02-03,open,duplicate_candidate,name_date_match/);
+    if (count === 4) assert.match(new TextDecoder().decode(result.normalizedCsv), /name_date_match\|phone_date_match/);
+  }
+});
+
+test("Node CLI refuses an existing output directory without overwriting its input", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "tabular-intake-preserve-"));
+  const source = resolve(directory, "normalized.csv");
+  const original = "source_id,name,phone,date,item\n1,Example,010-1234-5678,1990-02-03,open\n";
+  await writeFile(source, original);
+  await assert.rejects(execFileAsync(process.execPath, [resolve(root, "dist-js/cli.js"), "run", "--source", source, "--rules", resolve(sample, "rules.json"), "--output", directory]));
+  assert.equal(await readFile(source, "utf8"), original);
+  await assert.rejects(readFile(resolve(directory, "review.csv")), { code: "ENOENT" });
 });

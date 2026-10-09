@@ -31,7 +31,7 @@ const sourceCommit = process.env.GITHUB_SHA || execFileSync("git", ["rev-parse",
 await writeFile(resolve(output, "demo-build.json"), `${JSON.stringify({
   schemaVersion: "scalar-tabular-intake-demo-build/v1",
   packageVersion: "0.3.0",
-  coreVersion: "0.1.0",
+  coreVersion: "0.1.1",
   sourceTag: process.env.SOURCE_TAG || "dev",
   sourceCommit,
   files,

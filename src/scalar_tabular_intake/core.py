@@ -11,7 +11,7 @@ from datetime import date
 from typing import Iterable, Mapping, Sequence
 
 PACKAGE_VERSION = "0.3.0"
-CORE_VERSION = "0.1.0"
+CORE_VERSION = "0.1.1"
 RULE_SCHEMA = "scalar-tabular-intake-rules/v1"
 MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1"
 TABLE_CLEANUP_PROFILE_SCHEMA = "scalar-table-cleanup-profile/v1"
@@ -448,8 +448,6 @@ def run_csv_intake(source_csv: bytes, history_csv: bytes, rule_value: Mapping[st
     def group(indices: Sequence[str]) -> dict[tuple[str, ...], list[dict[str, object]]]:
         result: dict[tuple[str, ...], list[dict[str, object]]] = {}
         for record in eligible:
-            if record["intake_status"] != "ready":
-                continue
             key = tuple(str(record[field]) for field in indices)
             if all(key):
                 result.setdefault(key, []).append(record)

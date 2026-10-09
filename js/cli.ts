@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import {
   IntakeError,
@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   const allowed = command === "run" ? ["source", "history", "rules", "output"] : ["source", "previous", "profile", "output"];
   if (!source || !output || [...options.keys()].some(key => !allowed.includes(key))) usage();
   const destination = resolve(output);
-  await mkdir(destination, { recursive: true });
+
   if (command === "run") {
     const rules = options.get("rules");
     if (!rules) usage();
@@ -41,6 +41,8 @@ async function main(): Promise<void> {
       history: options.get("history") ? await readFile(options.get("history")!) : undefined,
       rules: JSON.parse(await readFile(rules, "utf8")) as RuleValue,
     });
+    await mkdir(dirname(destination), { recursive: true });
+    await mkdir(destination);
     await Promise.all([
       writeFile(resolve(destination, "normalized.csv"), result.normalizedCsv),
       writeFile(resolve(destination, "review.csv"), result.reviewCsv),
@@ -55,6 +57,8 @@ async function main(): Promise<void> {
     previous: options.get("previous") ? await readFile(options.get("previous")!) : undefined,
     profile: JSON.parse(await readFile(profile, "utf8")) as TableCleanupProfileV1,
   });
+  await mkdir(dirname(destination), { recursive: true });
+  await mkdir(destination);
   await Promise.all([
     writeFile(resolve(destination, "cleaned.csv"), result.cleanedCsv),
     writeFile(resolve(destination, "review.csv"), result.reviewCsv),

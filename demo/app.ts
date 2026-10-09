@@ -363,7 +363,7 @@ function renderRules(state: NonNullable<InputState>, preset?: TableCleanupProfil
 }
 
 function parseEnumMap(value: string): Record<string, string> {
-  const result: Record<string, string> = {};
+  const result: Record<string, string> = Object.create(null);
   for (const item of value.split(",").map(part => part.trim()).filter(Boolean)) {
     const separator = item.indexOf("=");
     if (separator < 1 || !item.slice(separator + 1).trim()) throw new IntakeError("invalid_profile", message("invalidEnum"));

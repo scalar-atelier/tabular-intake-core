@@ -13,7 +13,7 @@ python -m pip install scalar-tabular-intake==0.3.0
 npm install @scalar-atelier/tabular-intake-core@0.3.0
 ```
 
-The package release is `0.3.0`. The original deterministic intake contract remains `CORE_VERSION=0.1.0`, so existing WorkPacks and their output hashes remain compatible. Generic cleanup is versioned separately by `scalar-table-cleanup-profile/v1` and `scalar-table-cleanup-run/v1`.
+The package release is `0.3.0`. The patched deterministic intake contract is `CORE_VERSION=0.1.1`: overlapping duplicate candidates now remain in every comparison, so affected inputs enter review. Compare output hashes within the recorded core version. Generic cleanup is versioned separately by `scalar-table-cleanup-profile/v1` and `scalar-table-cleanup-run/v1`.
 
 ## Clean an arbitrary table
 
@@ -116,3 +116,5 @@ This repository contains only generic code and synthetic data. Customer headers,
 - Customer-specific labels or data in the public package
 
 MIT licensed.
+
+CLI safety: use a new output directory for each run or cleanup. Existing directories are refused to preserve sources and earlier results.

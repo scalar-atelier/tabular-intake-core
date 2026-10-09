@@ -1,7 +1,7 @@
 import { parse } from "csv-parse/browser/esm/sync";
 
 export const PACKAGE_VERSION = "0.3.0";
-export const CORE_VERSION = "0.1.0";
+export const CORE_VERSION = "0.1.1";
 export const RULE_SCHEMA = "scalar-tabular-intake-rules/v1";
 export const MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1";
 export const TABLE_CLEANUP_PROFILE_SCHEMA = "scalar-table-cleanup-profile/v1";
@@ -282,7 +282,7 @@ function writeCsv(fields: readonly string[], rows: Record<string, string>[], gua
       }
     }
   }
-  const lines = [fields.join(","), ...rows.map(row => fields.map(field => csvCell(row[field])).join(","))];
+  const lines = [fields.map(csvCell).join(","), ...rows.map(row => fields.map(field => csvCell(row[field])).join(","))];
   return encode(`${lines.join("\n")}\n`);
 }
 
@@ -390,8 +390,8 @@ export async function runCsvIntake(sourceCsv: Uint8Array, historyCsv: Uint8Array
       continue;
     }
     const detail = [text(row.period), text(row.category)].filter(Boolean).join(" ") || "matched";
-    if (phone) participantsPhone.set(phone, [...(participantsPhone.get(phone) ?? []), detail]);
-    if (key) participantsNameDate.set(key, [...(participantsNameDate.get(key) ?? []), detail]);
+    if (phone) { if (!participantsPhone.has(phone)) participantsPhone.set(phone, []); participantsPhone.get(phone)!.push(detail); }
+    if (key) { if (!participantsNameDate.has(key)) participantsNameDate.set(key, []); participantsNameDate.get(key)!.push(detail); }
   }
 
   const records: WorkingRecord[] = sourceRows.map((row, index) => {
@@ -424,11 +424,11 @@ export async function runCsvIntake(sourceCsv: Uint8Array, historyCsv: Uint8Array
   const group = (fields: string[]): Map<string, WorkingRecord[]> => {
     const result = new Map<string, WorkingRecord[]>();
     for (const record of eligible) {
-      if (record.intake_status !== "ready") continue;
       const parts = fields.map(field => String(record[field] ?? ""));
       if (!parts.every(Boolean)) continue;
       const key = canonicalJson(parts);
-      result.set(key, [...(result.get(key) ?? []), record]);
+      if (!result.has(key)) result.set(key, []);
+      result.get(key)!.push(record);
     }
     return result;
   };
@@ -551,7 +551,7 @@ function cleanupProfile(value: TableCleanupProfileV1): CleanupProfile {
     if (!rawEnum || typeof rawEnum !== "object" || Array.isArray(rawEnum) || Object.keys(rawEnum).length > 100) {
       throw new IntakeError("invalid_profile", "enumMap must be a small object");
     }
-    const enumMap: Record<string, string> = {};
+    const enumMap: Record<string, string> = Object.create(null);
     for (const [enumSourceRaw, enumOutputRaw] of Object.entries(rawEnum)) {
       if (typeof enumOutputRaw !== "string") throw new IntakeError("invalid_profile", "enumMap values must be strings");
       const enumSource = enumSourceRaw.trim();
@@ -621,7 +621,7 @@ function cleanupRows(data: Uint8Array, profile: CleanupProfile, kind: string): C
     if (raw.some(cell => charLength(cell) > profile.maxCellChars)) {
       throw new IntakeError("limit_exceeded", `${kind} CSV contains an oversized cell`);
     }
-    const values: Record<string, string> = {};
+    const values: Record<string, string> = Object.create(null);
     const reasons: string[] = [];
     const invalidOutputs = new Set<string>();
     for (const column of profile.columns) {
@@ -657,7 +657,8 @@ function cleanupRows(data: Uint8Array, profile: CleanupProfile, kind: string): C
     if (profile.keyColumns.length && parts.every(Boolean)
         && !profile.keyColumns.some(column => row.invalidOutputs.has(column))) {
       const key = canonicalJson(parts);
-      groups.set(key, [...(groups.get(key) ?? []), row]);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
     }
   }
   for (const matches of groups.values()) {
@@ -684,7 +685,7 @@ function cleanupWriteCsv(fields: string[], rows: Record<string, string>[], numer
       }
     }
   }
-  const lines = [fields.join(","), ...rows.map(row => fields.map(field => csvCell(row[field])).join(","))];
+  const lines = [fields.map(csvCell).join(","), ...rows.map(row => fields.map(field => csvCell(row[field])).join(","))];
   return encode(`${lines.join("\n")}\n`);
 }
 
@@ -697,8 +698,13 @@ function comparisonRows(current: CleanupRow[], previous: CleanupRow[], profile: 
   const key = (row: CleanupRow): string => canonicalJson(keyParts(row));
   const currentGroups = new Map<string, CleanupRow[]>();
   const previousGroups = new Map<string, CleanupRow[]>();
-  current.forEach(row => currentGroups.set(key(row), [...(currentGroups.get(key(row)) ?? []), row]));
-  previous.forEach(row => previousGroups.set(key(row), [...(previousGroups.get(key(row)) ?? []), row]));
+  for (const [rows, groups] of [[current, currentGroups], [previous, previousGroups]] as const) {
+    for (const row of rows) {
+      const rowKey = key(row);
+      if (!groups.has(rowKey)) groups.set(rowKey, []);
+      groups.get(rowKey)!.push(row);
+    }
+  }
   const rows: Record<string, string>[] = [];
   const seen = new Set<string>();
   const append = (change: string, row: CleanupRow, changed: string[] = []): void => {

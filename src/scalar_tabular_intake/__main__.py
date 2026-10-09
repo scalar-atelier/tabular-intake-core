@@ -14,7 +14,7 @@ def _write_result(source: Path, rules: Path, output: Path, history: Path | None)
         json.loads(rules.read_text(encoding="utf-8")),
         history.read_bytes() if history else None,
     )
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=False)
     (output / "normalized.csv").write_bytes(result.normalized_csv)
     (output / "review.csv").write_bytes(result.review_csv)
     (output / "result-manifest.json").write_bytes(result.manifest_json)
@@ -26,7 +26,7 @@ def _write_cleanup(source: Path, profile: Path, output: Path, previous: Path | N
         json.loads(profile.read_text(encoding="utf-8")),
         previous.read_bytes() if previous else None,
     )
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=False)
     (output / "cleaned.csv").write_bytes(result.cleaned_csv)
     (output / "review.csv").write_bytes(result.review_csv)
     (output / "comparison.csv").write_bytes(result.comparison_csv)
