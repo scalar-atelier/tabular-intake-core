@@ -11,11 +11,11 @@ Choose a registration or booking `.csv` saved from Excel or Google Sheets. The d
 ## For developers: Python or npm
 
 ```sh
-python -m pip install scalar-tabular-intake==0.2.2
-npm install @scalar-atelier/tabular-intake-core@0.2.2
+python -m pip install scalar-tabular-intake==0.2.3
+npm install @scalar-atelier/tabular-intake-core@0.2.3
 ```
 
-The package release is `0.2.2`. The deterministic transformation contract remains `CORE_VERSION=0.1.0`, so existing WorkPacks and their output hashes remain compatible.
+The package release is `0.2.3`. The deterministic transformation contract is `CORE_VERSION=0.1.1`. This patch keeps overlapping duplicate candidates in every comparison, so affected inputs now enter review instead of appearing ready. Result schemas are unchanged; compare output hashes only within the recorded core version.
 
 ## Run
 
@@ -30,6 +30,7 @@ scalar-tabular-intake run \
 ```
 
 The original four-positional Python CLI remains supported.
+Use a new output directory for each run. The CLI refuses an existing directory so it cannot replace source files or earlier results.
 
 ```python
 from scalar_tabular_intake import canonicalize_csv, run_intake
@@ -61,7 +62,7 @@ const result = await runIntake({ source, rules });
 - Normalizes names, Korean mobile numbers, and dates.
 - Classifies exact and two-of-three duplicate candidates while preserving phone-only shared contacts.
 - Checks participant and block history when a history CSV is supplied.
-- Keeps the v0.1 normalized/review/manifest bytes as shared Python–TypeScript golden vectors.
+- Keeps shared Python–TypeScript golden vectors for normalized/review CSV bytes and the versioned result manifest.
 - Rejects invalid UTF-8, malformed or ragged CSV, ambiguous mappings, duplicate IDs, oversized inputs, oversized rules, and formula-leading output cells.
 - Limits each input to 20MiB, 100,000 data rows, 256 columns, and 50,000 characters per cell.
 

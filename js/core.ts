@@ -1,7 +1,7 @@
 import { parse } from "csv-parse/browser/esm/sync";
 
-export const PACKAGE_VERSION = "0.2.2";
-export const CORE_VERSION = "0.1.0";
+export const PACKAGE_VERSION = "0.2.3";
+export const CORE_VERSION = "0.1.1";
 export const RULE_SCHEMA = "scalar-tabular-intake-rules/v1";
 export const MANIFEST_SCHEMA = "scalar-tabular-intake-result/v1";
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024;
@@ -361,8 +361,8 @@ export async function runCsvIntake(sourceCsv: Uint8Array, historyCsv: Uint8Array
       continue;
     }
     const detail = [text(row.period), text(row.category)].filter(Boolean).join(" ") || "matched";
-    if (phone) participantsPhone.set(phone, [...(participantsPhone.get(phone) ?? []), detail]);
-    if (key) participantsNameDate.set(key, [...(participantsNameDate.get(key) ?? []), detail]);
+    if (phone) { if (!participantsPhone.has(phone)) participantsPhone.set(phone, []); participantsPhone.get(phone)!.push(detail); }
+    if (key) { if (!participantsNameDate.has(key)) participantsNameDate.set(key, []); participantsNameDate.get(key)!.push(detail); }
   }
 
   const records: WorkingRecord[] = sourceRows.map((row, index) => {
@@ -395,11 +395,11 @@ export async function runCsvIntake(sourceCsv: Uint8Array, historyCsv: Uint8Array
   const group = (fields: string[]): Map<string, WorkingRecord[]> => {
     const result = new Map<string, WorkingRecord[]>();
     for (const record of eligible) {
-      if (record.intake_status !== "ready") continue;
       const parts = fields.map(field => String(record[field] ?? ""));
       if (!parts.every(Boolean)) continue;
       const key = canonicalJson(parts);
-      result.set(key, [...(result.get(key) ?? []), record]);
+      if (!result.has(key)) result.set(key, []);
+      result.get(key)!.push(record);
     }
     return result;
   };

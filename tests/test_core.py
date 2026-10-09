@@ -67,6 +67,15 @@ class IntakeCoreTest(unittest.TestCase):
         self.assertEqual(by_id["10"]["intake_status"], "information_review")
         self.assertEqual(by_id["11"]["intake_status"], "closed")
 
+    def test_duplicate_candidates_remain_in_overlapping_comparisons(self) -> None:
+        source = b"source_id,name,phone,date,item\n1,Example,01012345678,1990-02-03,open\n2,Example,01012345678,1990-02-03,open\n3,Example,01098765432,1990-02-03,open\n4,Other,01098765432,1990-02-03,open\n"
+        for count in (3, 4):
+            with self.subTest(count=count):
+                result = run_intake(b"\n".join(source.splitlines()[:count + 1]) + b"\n", self.rules)
+                self.assertEqual(result.summary["normal"], 0)
+                self.assertEqual(result.summary["duplicate_candidate"], count)
+                self.assertEqual(rows(result.normalized_csv)[2]["review_codes"], "name_date_match" if count == 3 else "name_date_match|phone_date_match")
+
     def test_csv_and_apps_script_snapshot_are_byte_identical(self) -> None:
         source_table = list(csv.reader(io.StringIO(self.source.decode("utf-8"))))
         history_table = list(csv.reader(io.StringIO(self.history.decode("utf-8"))))
@@ -118,8 +127,8 @@ class IntakeCoreTest(unittest.TestCase):
         source = b"source_id,name,phone,date,item\n1,Example,010-1234-5678,1990-02-03,open\n"
         result = run_intake(source, self.rules)
         self.assertEqual(result.summary["processed"], 1)
-        self.assertEqual(json.loads(result.manifest_json)["coreVersion"], "0.1.0")
-        self.assertEqual((PACKAGE_VERSION, CORE_VERSION), ("0.2.2", "0.1.0"))
+        self.assertEqual(json.loads(result.manifest_json)["coreVersion"], "0.1.1")
+        self.assertEqual((PACKAGE_VERSION, CORE_VERSION), ("0.2.3", "0.1.1"))
 
     def test_trust_boundary_error_codes_and_input_immutability(self) -> None:
         original = b"name,phone,date,item\nExample,010-1234-5678,1990-02-03,open\n"
@@ -170,6 +179,17 @@ class IntakeCoreTest(unittest.TestCase):
             self.assertTrue((root / "out" / "normalized.csv").is_file())
             self.assertTrue((root / "out" / "review.csv").is_file())
             self.assertTrue((root / "out" / "result-manifest.json").is_file())
+
+    def test_cli_preserves_source_in_existing_output_directory(self) -> None:
+        source = b"source_id,name,phone,date,item\n1,Example,010-1234-5678,1990-02-03,open\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original = root / "normalized.csv"
+            original.write_bytes(source)
+            with self.assertRaises(FileExistsError):
+                cli_main(["run", "--source", str(original), "--rules", str(SAMPLE / "rules.json"), "--output", str(root)])
+            self.assertEqual(original.read_bytes(), source)
+            self.assertFalse((root / "review.csv").exists())
 
     def test_public_tree_has_no_client_canary_and_bridge_has_no_writes(self) -> None:
         import base64

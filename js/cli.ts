@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { IntakeError, runIntake, type RuleValue } from "./core.js";
 
@@ -29,7 +29,8 @@ async function main(): Promise<void> {
     rules: JSON.parse(await readFile(rules, "utf8")) as RuleValue,
   });
   const destination = resolve(output);
-  await mkdir(destination, { recursive: true });
+  await mkdir(dirname(destination), { recursive: true });
+  await mkdir(destination);
   await Promise.all([
     writeFile(resolve(destination, "normalized.csv"), result.normalizedCsv),
     writeFile(resolve(destination, "review.csv"), result.reviewCsv),

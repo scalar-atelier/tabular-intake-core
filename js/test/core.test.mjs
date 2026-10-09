@@ -45,7 +45,7 @@ test("Python golden pack stays byte-identical in TypeScript", async () => {
     blocked_candidate: 2,
     closed: 1,
   });
-  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.2.2", "0.1.0"]);
+  assert.deepEqual([PACKAGE_VERSION, CORE_VERSION], ["0.2.3", "0.1.1"]);
   assert.equal(normalizePhone("+82 10-1234-5678"), "01012345678");
   assert.equal(normalizeDate("1990. 2. 3"), "1990-02-03");
 });
@@ -62,6 +62,18 @@ test("shared public adapter vectors stay byte-identical", async () => {
     rules: JSON.parse(await readFile(resolve(sample, "rules.json"), "utf8")),
   });
   assert.equal(result.summary.processed, 1);
+});
+
+test("duplicate candidates remain available to find overlapping two-of-three matches", async () => {
+  const source = encoder.encode("source_id,name,phone,date,item\n1,Example,01012345678,1990-02-03,open\n2,Example,01012345678,1990-02-03,open\n3,Example,01098765432,1990-02-03,open\n4,Other,01098765432,1990-02-03,open\n");
+  for (const count of [3, 4]) {
+    const input = encoder.encode(new TextDecoder().decode(source).split("\n").slice(0, count + 1).join("\n") + "\n");
+    const result = await runIntake({ source: input, rules: JSON.parse(await readFile(resolve(sample, "rules.json"), "utf8")) });
+    assert.equal(result.summary.normal, 0);
+    assert.equal(result.summary.duplicate_candidate, count);
+    assert.match(new TextDecoder().decode(result.normalizedCsv), /3,,Example,01098765432,1990-02-03,open,duplicate_candidate,name_date_match/);
+    if (count === 4) assert.match(new TextDecoder().decode(result.normalizedCsv), /name_date_match\|phone_date_match/);
+  }
 });
 
 test("trust-boundary errors match the public codes without mutating input", async () => {
@@ -113,6 +125,16 @@ test("Node CLI produces the three public artifacts without history", async () =>
   await execFileAsync(process.execPath, [resolve(root, "dist-js/cli.js"), "run", "--source", source, "--rules", rules, "--output", output]);
   const artifacts = await Promise.all(["normalized.csv", "review.csv", "result-manifest.json"].map(name => readFile(resolve(output, name))));
   assert.ok(artifacts.every(value => value.byteLength > 0));
+});
+
+test("Node CLI refuses an existing output directory without overwriting its input", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "tabular-intake-preserve-"));
+  const source = resolve(directory, "normalized.csv");
+  const original = "source_id,name,phone,date,item\n1,Example,010-1234-5678,1990-02-03,open\n";
+  await writeFile(source, original);
+  await assert.rejects(execFileAsync(process.execPath, [resolve(root, "dist-js/cli.js"), "run", "--source", source, "--rules", resolve(sample, "rules.json"), "--output", directory]));
+  assert.equal(await readFile(source, "utf8"), original);
+  await assert.rejects(readFile(resolve(directory, "review.csv")), { code: "ENOENT" });
 });
 
 test("demo-only Korean fixture explains every consumer outcome without changing the golden pack", async () => {

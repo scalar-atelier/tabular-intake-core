@@ -14,7 +14,7 @@ def _write_result(source: Path, rules: Path, output: Path, history: Path | None)
         json.loads(rules.read_text(encoding="utf-8")),
         history.read_bytes() if history else None,
     )
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=False)
     (output / "normalized.csv").write_bytes(result.normalized_csv)
     (output / "review.csv").write_bytes(result.review_csv)
     (output / "result-manifest.json").write_bytes(result.manifest_json)

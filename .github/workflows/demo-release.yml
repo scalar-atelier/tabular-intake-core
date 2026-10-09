@@ -46,7 +46,7 @@ jobs:
           const crypto = require('node:crypto');
           const receipt = JSON.parse(fs.readFileSync('/tmp/tabular-demo/demo-build.json'));
           if (receipt.packageVersion !== require('./package.json').version
-              || receipt.coreVersion !== '0.1.0'
+              || receipt.coreVersion !== '0.1.1'
               || receipt.sourceTag !== process.env.GITHUB_REF_NAME
               || receipt.sourceCommit !== process.env.GITHUB_SHA) process.exit(1);
           for (const [name, expected] of Object.entries(receipt.files)) {
@@ -60,5 +60,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "tabular-intake demo $GITHUB_REF_NAME"
-          --notes "Presentation-only browser demo release. Package 0.2.2 and deterministic core contract 0.1.0 are unchanged."
+          --notes "Presentation-only browser demo release. Package 0.2.3 and deterministic core contract 0.1.1 are unchanged."
           "tabular-intake-demo-${GITHUB_REF_NAME}.zip" "tabular-intake-demo-${GITHUB_REF_NAME}-receipt.json" SHA256SUMS
